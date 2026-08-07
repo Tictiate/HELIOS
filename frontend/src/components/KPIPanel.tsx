@@ -15,20 +15,20 @@ interface KPICardProps {
 
 const KPICard: React.FC<KPICardProps> = ({ title, value, decimals, unit, status, icon: Icon }) => (
   <div className="kpi-card">
-    <div className="flex items-center justify-between mb-2.5">
-      <span className="label-caps-sm">{title}</span>
-      <div className="flex items-center gap-2">
-        <Icon className="icon icon-sm" style={{ color: 'var(--text-muted)' }} />
-        <span className={`indicator-dot ${status}`} />
+    <div className="flex items-center justify-between mb-1.5">
+      <span className="label-caps-sm" style={{ fontSize: '9px' }}>{title}</span>
+      <div className="flex items-center gap-1.5">
+        <Icon className="icon icon-xs" style={{ color: 'var(--text-muted)' }} />
+        <span className={`indicator-dot ${status}`} style={{ width: 5, height: 5 }} />
       </div>
     </div>
     <div className="flex items-baseline gap-1">
       {value === null ? (
-        <span className="metric-value" style={{ fontSize: '24px' }}>--</span>
+        <span className="metric-value" style={{ fontSize: '17px' }}>--</span>
       ) : (
-        <AnimatedNumber value={value} decimals={decimals} className="metric-value" style={{ fontSize: '24px' }} />
+        <AnimatedNumber value={value} decimals={decimals} className="metric-value" style={{ fontSize: '17px' }} />
       )}
-      <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>{unit}</span>
+      <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500 }}>{unit}</span>
     </div>
   </div>
 );
@@ -123,7 +123,7 @@ const KPIPanel: React.FC = () => {
   }, [h, state.towerData]);
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-3 gap-2">
       {cards.map((card) => (
         <KPICard key={card.title} {...card} />
       ))}

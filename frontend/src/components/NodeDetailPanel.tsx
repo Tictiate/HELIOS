@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import type { IconType } from 'react-icons';
 import {
   FiRadio, FiServer, FiShield, FiGlobe, FiUsers, FiX, FiVideo, FiPhoneCall, FiCpu, FiPlay,
-  FiAlertTriangle, FiShare2, FiClock, FiActivity,
+  FiAlertTriangle, FiShare2,
 } from 'react-icons/fi';
 import { useSimulation } from '../context/SimulationContext';
 import { getConnectedNodeIds } from '../utils/topology';
@@ -12,6 +12,14 @@ import {
   NODE_STATUS_META, type NodeStatus,
 } from '../utils/nodeMetrics';
 import type { EventSeverity } from '../types';
+
+type TabId = 'overview' | 'metrics' | 'connections' | 'events';
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'metrics', label: 'Metrics' },
+  { id: 'connections', label: 'Connections' },
+  { id: 'events', label: 'Events' },
+];
 
 interface MetricRowProps {
   label: React.ReactNode;
@@ -72,6 +80,19 @@ const StatusBadge: React.FC<{ status: NodeStatus }> = ({ status }) => {
   );
 };
 
+const StatTile: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="stat-tile">
+    <div className="label-caps-sm" style={{ letterSpacing: 0, marginBottom: 3 }}>{label}</div>
+    <div className="metric-value" style={{ fontSize: '15px' }}>{value}</div>
+  </div>
+);
+
+const EmptyTabState: React.FC<{ text: string }> = ({ text }) => (
+  <div className="flex items-center justify-center" style={{ padding: '24px 0', color: 'var(--text-muted)', fontSize: '11px' }}>
+    {text}
+  </div>
+);
+
 const SEVERITY_DOT: Record<EventSeverity, string> = { info: 'blue', warning: 'yellow', critical: 'red', success: 'green' };
 
 function getBarColor(pct: number): string {
@@ -83,6 +104,9 @@ function getBarColor(pct: number): string {
 const NodeDetailPanel: React.FC = () => {
   const { selectedNode, state, setSelectedNode, events } = useSimulation();
   const reduceMotion = useReducedMotion();
+  const [activeTab, setActiveTab] = useState<TabId>('overview');
+
+  useEffect(() => { setActiveTab('overview'); }, [selectedNode?.id]);
 
   const meta = useMemo(() => {
     if (!selectedNode) return null;
@@ -124,9 +148,54 @@ const NodeDetailPanel: React.FC = () => {
   );
 
   const nodeAlerts = useMemo(
-    () => (selectedNode ? events.filter((e) => e.nodeId === selectedNode.id).slice(-5).reverse() : []),
+    () => (selectedNode ? events.filter((e) => e.nodeId === selectedNode.id).slice(-8).reverse() : []),
     [events, selectedNode]
   );
+
+  const overviewStats = useMemo((): { label: string; value: string }[] => {
+    if (!selectedNode || !meta) return [];
+    const { id, type } = selectedNode;
+
+    if (type === 'tower') {
+      const tower = state.towerData.get(id);
+      if (!tower) return [];
+      return [
+        { label: 'Health', value: `${meta.health}/100` },
+        { label: 'Users', value: tower.users.toLocaleString() },
+        { label: 'Latency', value: `${tower.latency_ms.toFixed(1)} ms` },
+        { label: 'Bandwidth', value: `${tower.available_bandwidth_mbps.toFixed(1)} Mbps` },
+        { label: 'Power', value: `${tower.power_usage_pct.toFixed(0)}%` },
+        { label: 'Load', value: `${getTowerUtilization(tower).toFixed(0)}%` },
+      ];
+    }
+    if (type === 'edge') {
+      const edge = state.edgeData.get(id);
+      if (!edge) return [];
+      return [
+        { label: 'Health', value: `${meta.health}/100` },
+        { label: 'CPU', value: `${edge.cpu_pct.toFixed(0)}%` },
+        { label: 'GPU', value: `${edge.gpu_pct.toFixed(0)}%` },
+        { label: 'Memory', value: `${edge.memory_pct.toFixed(0)}%` },
+        { label: 'Requests/min', value: edge.requests_per_min.toLocaleString() },
+        { label: 'Latency', value: `${edge.latency_ms.toFixed(1)} ms` },
+      ];
+    }
+    if (type === 'core') {
+      const h = state.healthData;
+      return [
+        { label: 'Health', value: `${meta.health}/100` },
+        { label: 'Towers', value: `${connectedNodes.length}` },
+        { label: 'Availability', value: h ? `${h.availability_pct.toFixed(1)}%` : '—' },
+      ];
+    }
+    if (type === 'critical') {
+      return [
+        { label: 'Health', value: `${meta.health}/100` },
+        { label: 'Linked Towers', value: `${connectedNodes.length}` },
+      ];
+    }
+    return [];
+  }, [selectedNode, meta, state.towerData, state.edgeData, state.healthData, connectedNodes.length]);
 
   const content = useMemo(() => {
     if (!selectedNode) return null;
@@ -186,7 +255,7 @@ const NodeDetailPanel: React.FC = () => {
         <div style={{ padding: '16px 0 4px' }}>
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
             Critical infrastructure node with priority routing enabled. Health is derived from the
-            real-time status of its linked towers below.
+            real-time status of its linked towers.
           </p>
         </div>
       );
@@ -280,90 +349,80 @@ const NodeDetailPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* Health score strip */}
-      {meta && (
-        <div className="flex items-center gap-2.5 px-4" style={{ padding: '9px 16px', borderBottom: '1px solid var(--glass-border)' }}>
-          <FiActivity className="icon icon-xs" style={{ color: 'var(--text-muted)' }} />
-          <span className="label-caps-sm" style={{ letterSpacing: 0 }}>Health Score</span>
-          <div className="metric-bar" style={{ flex: 1, margin: 0 }}>
-            <div className="metric-bar-fill" style={{ width: `${meta.health}%`, background: NODE_STATUS_META[meta.status].color }} />
-          </div>
-          <span className="metric-value" style={{ fontSize: '12px', width: 28, textAlign: 'right' }}>{meta.health}</span>
-        </div>
-      )}
+      {/* Tab bar */}
+      <div className="node-tab-bar">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            className={`node-tab ${activeTab === tab.id ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+            {tab.id === 'connections' && connectedNodes.length > 0 ? ` (${connectedNodes.length})` : ''}
+            {tab.id === 'events' && nodeAlerts.length > 0 ? ` (${nodeAlerts.length})` : ''}
+          </button>
+        ))}
+      </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 py-2">
+      <div className="flex-1 overflow-y-auto px-4 py-3">
         <AnimatePresence mode="wait">
           <motion.div
-            key={`${selectedNode.type}-${selectedNode.id}`}
+            key={`${selectedNode.type}-${selectedNode.id}-${activeTab}`}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
-            {content}
+            {activeTab === 'overview' && (
+              overviewStats.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {overviewStats.map((s) => <StatTile key={s.label} label={s.label} value={s.value} />)}
+                </div>
+              ) : <EmptyTabState text="No telemetry available for this node type" />
+            )}
+            {activeTab === 'metrics' && content}
+            {activeTab === 'connections' && (
+              connectedNodes.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {connectedNodes.map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => {
+                        const node = state.nodes.find((nn) => nn.node_id === n);
+                        setSelectedNode({ id: n, type: node?.node_type ?? (n === 'Control' ? 'core' : n === 'Hospital' ? 'critical' : n.startsWith('U') ? 'user' : n.startsWith('E') ? 'edge' : 'tower') });
+                      }}
+                      style={{
+                        padding: '4px 9px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.12)',
+                        border: '1px solid rgba(59, 130, 246, 0.2)', color: 'var(--accent-blue)', fontSize: '11px',
+                        fontWeight: 600, cursor: 'pointer', transition: 'background var(--dur-fast) ease',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(59, 130, 246, 0.22)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(59, 130, 246, 0.12)')}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              ) : <EmptyTabState text="No connected nodes" />
+            )}
+            {activeTab === 'events' && (
+              nodeAlerts.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  {nodeAlerts.map((a) => (
+                    <div key={a.id} className="flex items-start gap-2">
+                      <span className={`indicator-dot ${SEVERITY_DOT[a.severity]}`} style={{ marginTop: '4px', flexShrink: 0 }} />
+                      <div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{a.message}</span>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px', fontFamily: 'monospace' }}>{a.timestamp}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : <EmptyTabState text="No recent events for this node" />
+            )}
           </motion.div>
         </AnimatePresence>
-
-        {connectedNodes.length > 0 && (
-          <div style={{ marginTop: '14px' }}>
-            <div className="label-caps-sm" style={{ marginBottom: '6px' }}>Connected Nodes</div>
-            <div className="flex flex-wrap gap-1.5">
-              {connectedNodes.map((n) => (
-                <button
-                  key={n}
-                  onClick={() => {
-                    const node = state.nodes.find((nn) => nn.node_id === n);
-                    setSelectedNode({ id: n, type: node?.node_type ?? (n === 'Control' ? 'core' : n === 'Hospital' ? 'critical' : n.startsWith('U') ? 'user' : n.startsWith('E') ? 'edge' : 'tower') });
-                  }}
-                  style={{
-                    padding: '4px 9px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.12)',
-                    border: '1px solid rgba(59, 130, 246, 0.2)', color: 'var(--accent-blue)', fontSize: '11px',
-                    fontWeight: 600, cursor: 'pointer', transition: 'background var(--dur-fast) ease',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(59, 130, 246, 0.22)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(59, 130, 246, 0.12)')}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {nodeAlerts.length > 0 && (
-          <div style={{ marginTop: '14px' }}>
-            <div className="label-caps-sm" style={{ marginBottom: '6px' }}>Active Alerts</div>
-            <div className="flex flex-col gap-1.5">
-              {nodeAlerts.map((a) => (
-                <div key={a.id} className="flex items-start gap-2">
-                  <span className={`indicator-dot ${SEVERITY_DOT[a.severity]}`} style={{ marginTop: '4px', flexShrink: 0 }} />
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{a.message}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div style={{ marginTop: '14px', padding: '10px 0', borderTop: '1px solid rgba(148, 163, 184, 0.08)' }}>
-          <div className="flex items-center gap-1.5" style={{ marginBottom: '3px' }}>
-            <FiCpu className="icon icon-xs" style={{ color: 'var(--accent-cyan)', opacity: 0.7 }} />
-            <span className="label-caps-sm" style={{ letterSpacing: 0 }}>AI Recommendation</span>
-            <span className="panel-badge" style={{ marginLeft: 'auto', fontSize: '9px' }}>Coming Soon</span>
-          </div>
-          <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-            Explainable AI guidance for this node isn't connected yet — this panel is reserved for the
-            upcoming recommendation engine.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-1.5" style={{ marginTop: '10px', paddingBottom: '4px' }}>
-          <FiClock className="icon icon-xs" style={{ color: 'var(--text-muted)' }} />
-          <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-            Last updated: {state.timestamp}
-          </span>
-        </div>
       </div>
     </div>
   );

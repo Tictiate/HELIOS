@@ -14,6 +14,9 @@ const HealthGauge: React.FC = () => {
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference - (score / 100) * circumference;
 
+  const baselineScore = state.healthHistory[0]?.network_health_score ?? score;
+  const delta = score - baselineScore;
+
   const scoreMotion = useMotionValue(score);
   const scoreDisplay = useTransform(scoreMotion, (latest) => latest.toFixed(0));
   useEffect(() => {
@@ -22,8 +25,8 @@ const HealthGauge: React.FC = () => {
   }, [score, scoreMotion]);
 
   return (
-    <div className="flex flex-col items-center justify-center py-2">
-      <svg width="170" height="170" viewBox="0 0 180 180" style={{ filter: `drop-shadow(0 0 14px ${glowColor})` }}>
+    <div className="flex flex-col items-center justify-center py-1">
+      <svg width="128" height="128" viewBox="0 0 180 180" style={{ filter: `drop-shadow(0 0 14px ${glowColor})` }}>
         <circle cx="90" cy="90" r={radius} fill="none" stroke="rgba(148, 163, 184, 0.08)" strokeWidth="10" />
         <defs><linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor={color} /><stop offset="100%" stopColor={color} stopOpacity="0.5" />
@@ -37,6 +40,11 @@ const HealthGauge: React.FC = () => {
           style={{ fontFamily: 'Inter, sans-serif', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{label}</text>
       </svg>
       <span className="label-caps-sm" style={{ marginTop: '2px' }}>Network Health</span>
+      {Math.abs(delta) >= 0.1 && (
+        <span style={{ fontSize: '10px', fontWeight: 600, marginTop: '2px', color: delta >= 0 ? '#34d399' : '#f87171' }}>
+          {delta >= 0 ? '+' : ''}{delta.toFixed(1)}% vs last hour
+        </span>
+      )}
     </div>
   );
 };
