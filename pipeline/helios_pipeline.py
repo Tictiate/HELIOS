@@ -2,7 +2,8 @@
 helios_pipeline.py — HELIOS AI Pipeline Orchestrator.
 
 Coordinates and executes the workflow:
-Current Network State → Prediction Engine → Strategy Planner → Digital Twin Simulator.
+Current Network State → Prediction Engine → Strategy Planner
+→ Digital Twin Simulator → Multi-objective Optimizer.
 """
 
 import time
@@ -13,6 +14,7 @@ from typing import Dict, Any
 from ai_engine.prediction.predict import helios_predict
 from ai_engine.decision.planner import helios_plan
 from simulator.digital_twin.simulator import helios_simulate
+from ai_engine.optimizer.optimizer import helios_optimize
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,7 +22,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-PIPELINE_VERSION = "1.0.0"
+PIPELINE_VERSION = "2.0.0"
 
 
 class HeliosPipeline:
@@ -119,6 +121,13 @@ class HeliosPipeline:
             candidate_strategies=candidate_strategies,
         )
 
+    def run_optimizer(
+        self,
+        simulation: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Runs the Multi-objective Optimizer to select the best strategy."""
+        return helios_optimize(simulation)
+
     def run(self, raw_state: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Executes the complete HELIOS AI pipeline flow.
@@ -154,7 +163,22 @@ class HeliosPipeline:
         elapsed_sim_ms = round((time.perf_counter() - start_sim) * 1000, 2)
         print("✓ Complete\n" + "-" * 44)
 
-        total_elapsed_ms = round(elapsed_pred_ms + elapsed_plan_ms + elapsed_sim_ms, 2)
+        # Step 5: Run Multi-objective Optimizer
+        print("Running Multi-objective Optimizer...")
+        start_opt = time.perf_counter()
+        optimization = self.run_optimizer(simulation)
+        elapsed_opt_ms = round((time.perf_counter() - start_opt) * 1000, 2)
+        recommended = optimization.get("recommended_strategy", {})
+        if recommended:
+            print(f"✓ Complete — Recommended: {recommended.get('strategy', 'N/A')} "
+                  f"(Score: {recommended.get('score', 'N/A')})")
+        else:
+            print("✓ Complete — No feasible strategy found")
+        print("-" * 44)
+
+        total_elapsed_ms = round(
+            elapsed_pred_ms + elapsed_plan_ms + elapsed_sim_ms + elapsed_opt_ms, 2
+        )
 
         print("Pipeline Finished")
         print(f"Total Execution Time: {total_elapsed_ms} ms")
@@ -168,6 +192,7 @@ class HeliosPipeline:
                 "prediction": elapsed_pred_ms,
                 "planning": elapsed_plan_ms,
                 "simulation": elapsed_sim_ms,
+                "optimization": elapsed_opt_ms,
                 "total_pipeline": total_elapsed_ms,
             }
         }
@@ -178,4 +203,5 @@ class HeliosPipeline:
             "prediction": prediction,
             "strategies": strategies,
             "simulation": simulation,
+            "optimization": optimization,
         }

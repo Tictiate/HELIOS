@@ -2,7 +2,8 @@
 Integration Test — HELIOS AI Pipeline Orchestrator
 
 Executes and verifies the end-to-end HELIOS AI pipeline:
-Current State → Prediction Engine → Strategy Planner → Digital Twin Simulator.
+Current State → Prediction Engine → Strategy Planner
+→ Digital Twin Simulator → Multi-objective Optimizer.
 """
 
 import os
@@ -64,14 +65,16 @@ def test_pipeline_execution():
         prediction = result["prediction"]
         strategies = result["strategies"]
         simulation = result["simulation"]
+        optimization = result["optimization"]
 
-        print("\n" + "-"*80)
-        print(" PIPELINE STATE OUTPUT VERIFICATION")
-        print("-"*80)
+        print("\n" + "="*60)
+        print(" HELIOS AI PIPELINE".center(60))
+        print("="*60)
 
         # ── Check 1: Current State Loaded & Normalised ─────────────────────
         if current_state["tower_id"] == raw_state["tower_id"] and "latency_ms" in current_state:
-            print("  ✅ Current State Loaded & Normalised Successfully")
+            print("  ✓ Current State Loaded")
+            print("  ↓")
             passed += 1
         else:
             print("  ❌ Current State Load Failure")
@@ -79,9 +82,8 @@ def test_pipeline_execution():
 
         # ── Check 2: Prediction Successful ─────────────────────────────────
         if prediction and "prediction" in prediction and "network_health" in prediction:
-            print(f"  ✅ Prediction Successful: Health Score = {prediction['network_health']} ({prediction['health_status']})")
-            print(f"     Congestion: {prediction['prediction']['congestion']['prediction']} ({prediction['prediction']['congestion']['probability']}%)")
-            print(f"     Failure:    {prediction['prediction']['failure']['prediction']} ({prediction['prediction']['failure']['probability']}%)")
+            print(f"  ✓ Prediction Complete")
+            print("  ↓")
             passed += 1
         else:
             print("  ❌ Prediction Engine Execution Failure")
@@ -90,34 +92,61 @@ def test_pipeline_execution():
         # ── Check 3: Strategies Generated ──────────────────────────────────
         candidates = strategies.get("candidate_strategies", [])
         if "planning_goal" in strategies and isinstance(candidates, list):
-            print(f"  ✅ Strategies Generated: Goal = '{strategies['planning_goal']}' ({len(candidates)} candidates)")
+            print(f"  ✓ Strategies Generated")
+            print("  ↓")
             passed += 1
         else:
             print("  ❌ Strategy Planner Execution Failure")
             failed += 1
 
-        # ── Check 4: Three Simulations Produced (or up to len(candidates)) ─
+        # ── Check 4: Three Simulations Produced ────────────────────────────
         simulated = simulation.get("simulated_strategies", [])
         expected_sim_count = min(3, len(candidates))
         if len(simulated) == expected_sim_count:
-            print(f"  ✅ Digital Twin Simulation: Correctly Simulated Top {len(simulated)} Strategies")
-            for sim in simulated:
-                timeline = sim["timeline"]
-                print(f"     - '{sim['strategy']}' timeline generated ({len(timeline)} ticks)")
+            print(f"  ✓ Three Simulations Completed")
+            print("  ↓")
             passed += 1
         else:
             print(f"  ❌ Digital Twin Simulator Output Mismatch. Expected {expected_sim_count}, got {len(simulated)}")
             failed += 1
 
-        # ── Check 5: Pipeline Timings Registered ──────────────────────────
+        # ── Check 5: Optimization Complete ─────────────────────────────────
+        recommended = optimization.get("recommended_strategy")
+        ranking = optimization.get("ranking", [])
+        opt_summary = optimization.get("optimization_summary", {})
+
+        if (recommended
+                and recommended.get("strategy")
+                and recommended.get("score", 0) > 0
+                and opt_summary.get("constraints_checked") is True
+                and len(ranking) == len(simulated)):
+            print(f"  ✓ Optimization Complete")
+            print()
+            print(f"  Recommended Strategy")
+            print(f"  {recommended['strategy']}")
+            print(f"  Score")
+            print(f"  {recommended['score']}")
+            passed += 1
+        else:
+            print("  ❌ Optimization Failure")
+            failed += 1
+
+        # ── Check 6: Pipeline Timings Include Optimization ─────────────────
         timings = metadata.get("timings_ms", {})
-        if all(k in timings for k in ["prediction", "planning", "simulation", "total_pipeline"]):
-            print(f"  ✅ Pipeline Execution Timings: {timings['total_pipeline']} ms total")
-            print(f"     [Prediction: {timings['prediction']} ms | Planning: {timings['planning']} ms | Simulation: {timings['simulation']} ms]")
+        if all(k in timings for k in ["prediction", "planning", "simulation", "optimization", "total_pipeline"]):
+            print()
+            print(f"  Pipeline Execution: {timings['total_pipeline']} ms")
+            print(f"  [Prediction: {timings['prediction']} ms | Planning: {timings['planning']} ms | "
+                  f"Simulation: {timings['simulation']} ms | Optimization: {timings['optimization']} ms]")
             passed += 1
         else:
             print("  ❌ Pipeline Timings Missing or Incomplete")
             failed += 1
+
+        print()
+        print("="*60)
+        print(" Pipeline Completed Successfully".center(60))
+        print("="*60)
 
     total = passed + failed
     print(f"\n{'='*80}")
