@@ -1,0 +1,17 @@
+node_id,node_type
+T1,tower
+T2,tower
+T3,tower
+T4,tower
+T5,tower
+T6,tower
+T7,tower
+T8,tower
+T9,tower
+T10,tower
+E1,edge
+E2,edge
+E3,edge
+E4,edge
+Hospital,critical
+Control,core
