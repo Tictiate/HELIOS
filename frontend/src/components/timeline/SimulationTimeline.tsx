@@ -1,19 +1,22 @@
 import React from 'react';
-import { FiClock } from 'react-icons/fi';
+import { FiClock, FiRadio, FiPlayCircle, FiLoader } from 'react-icons/fi';
 import { useSimulation, TOTAL_TICKS } from '../../context/SimulationContext';
-import { SIMULATION_DURATION_LABEL } from './MockTimelineData';
 import TimelineReplayChart from './TimelineReplayChart';
 import TimelineScrubber from './TimelineScrubber';
 import TimelinePlaybackControls from './TimelinePlaybackControls';
+
+const SIMULATION_DURATION_LABEL = '24:00:00';
 
 /**
  * Pure reflection of the shared simulation state — owns no play/speed/position state of its
  * own. Header Play/Pause/Speed is the one controller; clicking/dragging here calls the exact
  * same `controls.seekTo`/`play`/`pause`/`setSpeed` the header uses, so both stay trivially in
- * sync (there is nothing else to keep in sync).
+ * sync. The chart/scrubber replay the real per-tower fleet history fetched from the backend.
+ * The Live/Replay toggle switches the AI-loop panels (Predictions/Strategies) between the live
+ * WebSocket feed and scrubbed `/history` snapshots — see SimulationContext for details.
  */
 const SimulationTimeline: React.FC = () => {
-  const { state, controls, replayFrames } = useSimulation();
+  const { state, controls, dailySeries, isReplaying, isReplayLoading, replaySnapshotCount, enterReplay, exitReplay } = useSimulation();
 
   const progressPct = (state.currentTick / (TOTAL_TICKS - 1)) * 100;
   const currentTimeStr = state.timestamp.split(' ')[1] || '00:00:00';
@@ -25,9 +28,25 @@ const SimulationTimeline: React.FC = () => {
         <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
           Simulation Replay
         </span>
+        <button
+          onClick={isReplaying ? exitReplay : enterReplay}
+          disabled={isReplayLoading}
+          className={`timeline-btn ${isReplaying ? 'active' : ''}`}
+          style={{ marginLeft: 'auto', padding: '3px 9px' }}
+          title={isReplaying ? 'Return to live AI decisions' : 'Replay AI decisions from backend snapshot history'}
+        >
+          {isReplayLoading ? (
+            <FiLoader style={{ width: 10, height: 10, animation: 'spin 1s linear infinite' }} />
+          ) : isReplaying ? (
+            <FiRadio style={{ width: 10, height: 10 }} />
+          ) : (
+            <FiPlayCircle style={{ width: 10, height: 10 }} />
+          )}
+          {isReplayLoading ? 'Loading…' : isReplaying ? `Replay (${replaySnapshotCount})` : 'Live'}
+        </button>
       </div>
 
-      <TimelineReplayChart frames={replayFrames} currentTick={state.currentTick} totalTicks={TOTAL_TICKS} onSeek={controls.seekTo} />
+      <TimelineReplayChart points={dailySeries} currentTick={state.currentTick} totalTicks={TOTAL_TICKS} onSeek={controls.seekTo} />
 
       <div style={{ borderTop: '1px solid rgba(148, 163, 184, 0.1)', paddingTop: 8, flexShrink: 0 }}>
         <TimelineScrubber currentTick={state.currentTick} totalTicks={TOTAL_TICKS} onSeek={controls.seekTo} />

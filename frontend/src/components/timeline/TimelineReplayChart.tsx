@@ -1,8 +1,8 @@
 import React, { useCallback, useMemo, useRef } from 'react';
-import type { MockFrame } from './MockTimelineData';
+import type { DailyPoint } from '../../context/SimulationContext';
 
 interface TimelineReplayChartProps {
-  frames: MockFrame[];
+  points: DailyPoint[];
   currentTick: number;
   totalTicks: number;
   onSeek: (tick: number) => void;
@@ -20,24 +20,27 @@ function niceTicks(min: number, max: number, count: number): number[] {
 }
 
 /**
- * Single combined replay chart — latency (blue, left axis) and bandwidth (purple, right axis)
- * on a shared X-axis, flat AWS-CloudWatch-style lines with no fills/gradients. Press-and-drag
+ * Combined replay chart — latency (blue, left axis) and bandwidth (purple, right axis) on a
+ * shared X-axis, flat AWS-CloudWatch-style lines with no fills/gradients. Press-and-drag
  * anywhere to scrub; calls the same `controls.seekTo` the header's playback controls use.
  */
-const TimelineReplayChart: React.FC<TimelineReplayChartProps> = ({ frames, currentTick, totalTicks, onSeek }) => {
+const TimelineReplayChart: React.FC<TimelineReplayChartProps> = ({ points, currentTick, totalTicks, onSeek }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const draggingRef = useRef(false);
 
   const { latencyPoints, bandwidthPoints, latencyTicks, bandwidthTicks } = useMemo(() => {
-    const latencyValues = frames.map((f) => f.avgLatencyMs);
-    const bandwidthValues = frames.map((f) => f.avgBandwidthMbps);
+    if (points.length === 0) {
+      return { latencyPoints: [], bandwidthPoints: [], latencyTicks: [0], bandwidthTicks: [0] };
+    }
+    const latencyValues = points.map((p) => p.latency);
+    const bandwidthValues = points.map((p) => p.bandwidth);
     const lMin = Math.min(...latencyValues), lMax = Math.max(...latencyValues);
     const bMin = Math.min(...bandwidthValues), bMax = Math.max(...bandwidthValues);
     const innerH = HEIGHT - PAD_TOP - PAD_BOTTOM;
 
     const toPoints = (values: number[], min: number, max: number) =>
-      frames.map((f, i) => {
-        const x = (f.hour / 24) * WIDTH;
+      points.map((p, i) => {
+        const x = (p.hour / 24) * WIDTH;
         const range = max - min || 1;
         const y = PAD_TOP + innerH - ((values[i] - min) / range) * innerH;
         return { x, y };
@@ -49,13 +52,13 @@ const TimelineReplayChart: React.FC<TimelineReplayChartProps> = ({ frames, curre
       latencyTicks: niceTicks(lMin, lMax, 4),
       bandwidthTicks: niceTicks(bMin, bMax, 4),
     };
-  }, [frames]);
+  }, [points]);
 
   const cursorX = (currentTick / (totalTicks - 1)) * WIDTH;
-  const nearestFrameIdx = Math.min(frames.length - 1, Math.round((currentTick / (totalTicks - 1)) * (frames.length - 1)));
-  const nearestFrame = frames[nearestFrameIdx];
+  const nearestIdx = points.length > 0 ? Math.min(points.length - 1, Math.round((currentTick / (totalTicks - 1)) * (points.length - 1))) : -1;
+  const nearestPoint = nearestIdx >= 0 ? points[nearestIdx] : null;
 
-  const pathFor = (points: { x: number; y: number }[]) => points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+  const pathFor = (pts: { x: number; y: number }[]) => pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
 
   const seekFromClientX = useCallback((clientX: number) => {
     const svg = svgRef.current;
@@ -85,9 +88,9 @@ const TimelineReplayChart: React.FC<TimelineReplayChartProps> = ({ frames, curre
         <span className="flex items-center gap-1.5" style={{ fontSize: '10px', fontWeight: 600, color: '#c4b5fd' }}>
           <span style={{ width: 12, height: 2, background: '#a78bfa', display: 'inline-block' }} /> Bandwidth (Mbps)
         </span>
-        {nearestFrame && (
+        {nearestPoint && (
           <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>
-            {nearestFrame.avgLatencyMs.toFixed(1)}ms · {nearestFrame.avgBandwidthMbps.toFixed(1)}Mbps
+            {nearestPoint.latency.toFixed(1)}ms · {nearestPoint.bandwidth.toFixed(1)}Mbps
           </span>
         )}
       </div>
@@ -102,16 +105,14 @@ const TimelineReplayChart: React.FC<TimelineReplayChartProps> = ({ frames, curre
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         >
-          {/* gridlines */}
           {latencyTicks.map((t, i) => {
             const y = PAD_TOP + (HEIGHT - PAD_TOP - PAD_BOTTOM) - (i / (latencyTicks.length - 1)) * (HEIGHT - PAD_TOP - PAD_BOTTOM);
             return <line key={t} x1={0} y1={y} x2={WIDTH} y2={y} stroke="rgba(148, 163, 184, 0.08)" strokeWidth={1} vectorEffect="non-scaling-stroke" />;
           })}
-          <path d={pathFor(latencyPoints)} fill="none" stroke="#3b82f6" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-          <path d={pathFor(bandwidthPoints)} fill="none" stroke="#a78bfa" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+          {latencyPoints.length > 0 && <path d={pathFor(latencyPoints)} fill="none" stroke="#3b82f6" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}
+          {bandwidthPoints.length > 0 && <path d={pathFor(bandwidthPoints)} fill="none" stroke="#a78bfa" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}
           <line x1={cursorX} y1={0} x2={cursorX} y2={HEIGHT} stroke="rgba(226, 232, 240, 0.5)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
         </svg>
-        {/* axis labels (HTML overlay, keeps text crisp regardless of SVG scaling) */}
         <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
           {[...latencyTicks].reverse().map((t) => (
             <span key={t} style={{ fontSize: '9px', color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>{t}</span>

@@ -140,28 +140,28 @@ class HeliosPipeline:
         # Step 1: Load Current Network State
         print("Loading Current Digital Twin...")
         current_state = self.load_network_state(raw_state)
-        print("✓ Complete\n" + "-" * 44)
+        print("OK - Complete\n" + "-" * 44)
 
         # Step 2: Run Prediction Engine
         print("Running Prediction Engine...")
         start_pred = time.perf_counter()
         prediction = self.run_prediction(current_state)
         elapsed_pred_ms = round((time.perf_counter() - start_pred) * 1000, 2)
-        print("✓ Complete\n" + "-" * 44)
+        print("OK - Complete\n" + "-" * 44)
 
         # Step 3: Run Strategy Planner
         print("Running Strategy Planner...")
         start_plan = time.perf_counter()
         strategies = self.run_strategy_planner(prediction, current_state)
         elapsed_plan_ms = round((time.perf_counter() - start_plan) * 1000, 2)
-        print("✓ Complete\n" + "-" * 44)
+        print("OK - Complete\n" + "-" * 44)
 
         # Step 4: Run Digital Twin Simulator
         print("Running Digital Twin Simulator...")
         start_sim = time.perf_counter()
         simulation = self.run_simulator(current_state, prediction, strategies)
         elapsed_sim_ms = round((time.perf_counter() - start_sim) * 1000, 2)
-        print("✓ Complete\n" + "-" * 44)
+        print("OK - Complete\n" + "-" * 44)
 
         # Step 5: Run Multi-objective Optimizer
         print("Running Multi-objective Optimizer...")
@@ -170,10 +170,10 @@ class HeliosPipeline:
         elapsed_opt_ms = round((time.perf_counter() - start_opt) * 1000, 2)
         recommended = optimization.get("recommended_strategy", {})
         if recommended:
-            print(f"✓ Complete — Recommended: {recommended.get('strategy', 'N/A')} "
+            print(f"OK - Complete — Recommended: {recommended.get('strategy', 'N/A')} "
                   f"(Score: {recommended.get('score', 'N/A')})")
         else:
-            print("✓ Complete — No feasible strategy found")
+            print("OK - Complete — No feasible strategy found")
         print("-" * 44)
 
         total_elapsed_ms = round(

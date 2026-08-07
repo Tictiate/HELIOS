@@ -1,5 +1,9 @@
 import React, { useCallback, useRef } from 'react';
-import { TIMELINE_HOUR_LABELS } from './MockTimelineData';
+
+/** 13 fixed axis labels, every 2 hours — the fleet tick range (0..TOTAL_TICKS-1) always maps
+ * onto a continuous virtual 24h clock (see SimulationContext), regardless of the real sample
+ * spacing underneath. */
+const TIMELINE_HOUR_LABELS: string[] = Array.from({ length: 13 }, (_, i) => `${String(i * 2).padStart(2, '0')}:00`);
 
 interface TimelineScrubberProps {
   currentTick: number;

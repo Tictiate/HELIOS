@@ -1,5 +1,6 @@
 import React from 'react';
-import { motion, type Variants } from 'framer-motion';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
+import { FiWifiOff } from 'react-icons/fi';
 import { SimulationProvider, useSimulation } from './context/SimulationContext';
 import ParticleBackground from './components/ParticleBackground';
 import Header from './components/Header';
@@ -15,6 +16,7 @@ import AIDecisionsPanel from './components/ai/AIDecisionsPanel';
 import HeliosAssistantPanel from './components/ai/HeliosAssistantPanel';
 import SimulationTimeline from './components/timeline/SimulationTimeline';
 import Skeleton from './components/common/Skeleton';
+import { ToastContainer } from './components/common/Toast';
 import './index.css';
 
 const GRID_STYLE: React.CSSProperties = { gridTemplateColumns: '340px 1fr 380px', gridTemplateRows: '1fr' };
@@ -75,6 +77,28 @@ const DashboardSkeleton: React.FC = () => (
   </div>
 );
 
+const ReconnectBanner: React.FC = () => {
+  const { connectionStatus } = useSimulation();
+  const show = connectionStatus === 'disconnected' || connectionStatus === 'reconnecting' || connectionStatus === 'error';
+
+  return (
+    <AnimatePresence>
+      {show && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.2 }}
+          className="reconnect-banner"
+        >
+          <FiWifiOff style={{ width: 13, height: 13 }} />
+          {connectionStatus === 'error' ? 'Connection error — retrying…' : 'Connection lost — reconnecting…'}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
 const Dashboard: React.FC = () => {
   const { isLoading } = useSimulation();
 
@@ -85,6 +109,7 @@ const Dashboard: React.FC = () => {
   return (
     <div className="h-screen w-screen flex flex-col bg-[#060a14] text-slate-200 overflow-hidden relative">
       <ParticleBackground />
+      <ReconnectBanner />
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
         <Header />
       </motion.div>
@@ -149,6 +174,7 @@ const App: React.FC = () => {
   return (
     <SimulationProvider>
       <Dashboard />
+      <ToastContainer />
     </SimulationProvider>
   );
 };

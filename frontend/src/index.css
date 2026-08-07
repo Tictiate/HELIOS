@@ -353,6 +353,38 @@ body {
 }
 .chat-send-btn:hover { background: rgba(34, 211, 238, 0.24); }
 
+/* ─── Toasts / connection status ───────────────────────────────────── */
+
+.toast-stack {
+  position: fixed; bottom: 20px; right: 20px; z-index: 2000;
+  display: flex; flex-direction: column; gap: 8px; width: 320px;
+  pointer-events: none;
+}
+.toast-item {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(13, 18, 32, 0.97); border: 1px solid var(--glass-border);
+  border-left: 3px solid; border-radius: 6px; padding: 10px 12px;
+  box-shadow: var(--shadow-md); pointer-events: auto;
+}
+.toast-dismiss {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  display: flex; align-items: center; padding: 2px; flex-shrink: 0;
+}
+.toast-dismiss:hover { color: var(--text-primary); }
+
+.reconnect-banner {
+  position: fixed; top: 62px; left: 50%; transform: translateX(-50%); z-index: 1900;
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(120, 53, 15, 0.92); border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: 8px; padding: 8px 14px; box-shadow: var(--shadow-md);
+  font-size: 12px; font-weight: 600; color: #fde68a;
+}
+
+.connection-pill {
+  display: flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 10px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.05em;
+}
+
 /* ─── Reduced motion ────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {

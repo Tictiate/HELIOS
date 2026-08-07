@@ -1,6 +1,19 @@
 import React, { createContext, useContext, useCallback, useEffect, useRef, useState } from 'react';
-import { loadAllData } from '../utils/csvLoader';
-import { MOCK_TIMELINE_FRAMES, type MockFrame } from '../components/timeline/MockTimelineData';
+import { getTowers, getEdges, getTowerUtilization, getTowerTraffic, getTowerFailures, getEdgeTelemetry, getNetworkHealth } from '../services/api/network';
+import { getSnapshotHistory } from '../services/api/snapshots';
+import { useWebSocket } from '../hooks/useWebSocket';
+import { WS_BASE_URL } from '../services/api/client';
+import {
+  adaptTowerUtilization, adaptTraffic, adaptFailure, adaptEdgeTelemetry, adaptNetworkHealth, adaptNodes,
+} from '../services/adapters/telemetryAdapter';
+import {
+  adaptExecutionReport, adaptPrediction, adaptStrategies, strategyToQueuedDecision,
+  adaptScenarioMetadata, adaptInsight,
+} from '../services/adapters/aiLoopAdapter';
+import type { AiDecisionItem, PredictionSummary, StrategySummary, AlertItem, AssistantInsight } from '../services/adapters/aiLoopAdapter';
+import { TOWER_IDS, EDGE_IDS } from '../utils/topology';
+import type { NetworkWsMessage, NetworkSnapshotResponse } from '../types/backend';
+import type { WsStatus } from '../services/websocket/websocket';
 import type {
   TowerUtilizationRow,
   TrafficProfileRow,
@@ -18,6 +31,9 @@ import type {
 const MAX_HISTORY = 60;
 export const TOTAL_TICKS = 1000;
 const SECONDS_PER_DAY = 86400;
+/** Scenario-derived alerts have no "resolved" signal from the backend (it's a one-shot event
+ * marker, not persistent state) — they auto-expire client-side after this long. */
+const ALERT_TTL_MS = 120_000;
 
 interface SimContextValue {
   state: SimulationState;
@@ -28,8 +44,26 @@ interface SimContextValue {
   filters: FilterState;
   setFilters: React.Dispatch<React.SetStateAction<FilterState>>;
   isLoading: boolean;
-  /** The full 24h mock replay frame set — the single source of truth `state` is derived from. */
-  replayFrames: MockFrame[];
+  /** WebSocket connection status for the AI decision-loop layer. */
+  connectionStatus: WsStatus;
+  aiDecisions: AiDecisionItem[];
+  prediction: PredictionSummary | null;
+  strategies: StrategySummary | null;
+  alerts: AlertItem[];
+  assistantInsight: AssistantInsight | null;
+  isReplaying: boolean;
+  isReplayLoading: boolean;
+  replaySnapshotCount: number;
+  enterReplay: () => void;
+  exitReplay: () => void;
+  /** Downsampled fleet-wide latency/bandwidth series for the Simulation Replay chart. */
+  dailySeries: DailyPoint[];
+}
+
+export interface DailyPoint {
+  hour: number;
+  latency: number;
+  bandwidth: number;
 }
 
 const SimulationContext = createContext<SimContextValue | null>(null);
@@ -40,65 +74,35 @@ export function useSimulation(): SimContextValue {
   return ctx;
 }
 
-function groupByTick<T extends { timestamp?: string }>(
-  data: T[],
-  idField: string,
-  totalTicks: number
-): Map<string, T>[] {
-  const tickMaps: Map<string, T>[] = [];
-  const idSet = new Set<string>();
-  data.forEach((row) => idSet.add((row as Record<string, unknown>)[idField] as string));
-  const ids = Array.from(idSet);
-  const rowsPerTick = Math.ceil(data.length / totalTicks);
-
+/** Scales a chronological row array onto exactly `totalTicks` slots (nearest-floor lookup) —
+ * handles the fact that each tower/edge/health series has a different real row count. */
+function scaleToTicks<T>(rows: T[], totalTicks: number): T[] {
+  if (rows.length === 0) return [];
+  const out: T[] = Array.from({ length: totalTicks });
+  const lastIdx = rows.length - 1;
   for (let tick = 0; tick < totalTicks; tick++) {
-    const map = new Map<string, T>();
-    if (tick > 0 && tickMaps[tick - 1]) {
-      tickMaps[tick - 1].forEach((v, k) => map.set(k, v));
-    }
-    const startIdx = tick * rowsPerTick;
-    const endIdx = Math.min(startIdx + rowsPerTick, data.length);
-    for (let i = startIdx; i < endIdx; i++) {
-      const row = data[i];
-      const id = (row as Record<string, unknown>)[idField] as string;
-      map.set(id, row);
-    }
-    if (tick === 0) {
-      ids.forEach((id) => {
-        if (!map.has(id)) {
-          const firstRow = data.find(
-            (r) => (r as Record<string, unknown>)[idField] === id
-          );
-          if (firstRow) map.set(id, firstRow);
-        }
-      });
-    }
-    tickMaps.push(map);
+    const idx = lastIdx === 0 ? 0 : Math.min(lastIdx, Math.floor((tick / (totalTicks - 1)) * lastIdx));
+    out[tick] = rows[idx];
   }
-  return tickMaps;
+  return out;
 }
 
-function groupFailuresByTick(
-  data: TowerFailureRow[],
+/** Builds the same `Map<string, Row>[]` shape the dashboard already consumes, one map per tick,
+ * from multiple entities (towers/edges) each independently scaled onto the tick range. */
+function buildEntityTickMaps<T>(
+  entities: { id: string; rows: T[] }[],
   totalTicks: number
-): Map<string, TowerFailureRow>[] {
-  const tickMaps: Map<string, TowerFailureRow>[] = [];
-  const rowsPerTick = Math.ceil(data.length / totalTicks);
-
+): Map<string, T>[] {
+  const scaled = entities.map((e) => ({ id: e.id, rows: scaleToTicks(e.rows, totalTicks) }));
+  const out: Map<string, T>[] = Array.from({ length: totalTicks });
   for (let tick = 0; tick < totalTicks; tick++) {
-    const map = new Map<string, TowerFailureRow>();
-    if (tick > 0 && tickMaps[tick - 1]) {
-      tickMaps[tick - 1].forEach((v, k) => map.set(k, v));
-    }
-    const startIdx = tick * rowsPerTick;
-    const endIdx = Math.min(startIdx + rowsPerTick, data.length);
-    for (let i = startIdx; i < endIdx; i++) {
-      const row = data[i];
-      map.set(row.tower_id, row);
-    }
-    tickMaps.push(map);
+    const map = new Map<string, T>();
+    scaled.forEach(({ id, rows }) => {
+      if (rows[tick] !== undefined) map.set(id, rows[tick]);
+    });
+    out[tick] = map;
   }
-  return tickMaps;
+  return out;
 }
 
 function generateEvents(
@@ -173,7 +177,8 @@ function generateEvents(
 }
 
 export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isLoading, setIsLoading] = useState(true);
+  const [fleetLoading, setFleetLoading] = useState(true);
+  const [dailySeries, setDailySeries] = useState<DailyPoint[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeedState] = useState(1);
   const [currentTick, setCurrentTick] = useState(0);
@@ -194,20 +199,83 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const speedRef = useRef(speed);
   speedRef.current = speed;
 
+  // ── Fleet / Digital Twin layer — fetched once from the real per-tower/edge REST endpoints,
+  // then replayed through the tick engine below exactly like the old mock CSVs were. ─────────
   useEffect(() => {
-    loadAllData().then((raw) => {
-      nodesRef.current = raw.networkNodes;
-      healthTicks.current = raw.networkHealth;
-      towerTicks.current = groupByTick<TowerUtilizationRow>(raw.towerUtil, 'tower_id', TOTAL_TICKS);
-      trafficTicks.current = groupByTick<TrafficProfileRow>(raw.trafficProfile, 'tower_id', TOTAL_TICKS);
-      edgeTicks.current = groupByTick<EdgeServerRow>(raw.edgeServers, 'edge_id', TOTAL_TICKS);
-      failureTicks.current = groupFailuresByTick(raw.towerFailures, TOTAL_TICKS);
-      setIsLoading(false);
-    });
+    let cancelled = false;
+
+    async function loadFleet() {
+      try {
+        const [towersRes, edgesRes] = await Promise.all([
+          getTowers(0, TOWER_IDS.length),
+          getEdges(0, EDGE_IDS.length),
+        ]);
+
+        const towerSeries = await Promise.all(TOWER_IDS.map(async (id) => {
+          const [util, traffic, failures] = await Promise.all([
+            getTowerUtilization(id, 0, 1000).catch(() => []),
+            getTowerTraffic(id, 0, 1000).catch(() => []),
+            getTowerFailures(id, 0, 1000).catch(() => []),
+          ]);
+          return {
+            id,
+            // Backend orders utilization/traffic newest-first — reverse to chronological so
+            // tick 0 = earliest, matching the tick engine's existing convention.
+            util: util.map(adaptTowerUtilization).reverse(),
+            traffic: traffic.map(adaptTraffic).reverse(),
+            // Failures carry no timestamp/order guarantee from the backend — used as returned.
+            failures: failures.map(adaptFailure),
+          };
+        }));
+
+        const edgeSeries = await Promise.all(EDGE_IDS.map(async (id) => {
+          const telemetry = await getEdgeTelemetry(id, 0, 1000).catch(() => []);
+          return { id, telemetry: telemetry.map(adaptEdgeTelemetry).reverse() };
+        }));
+
+        const healthRes = await getNetworkHealth(0, 1000).catch(() => []);
+        const healthRows = healthRes.map(adaptNetworkHealth).reverse();
+
+        if (cancelled) return;
+
+        nodesRef.current = adaptNodes(towersRes, edgesRes);
+        healthTicks.current = scaleToTicks(healthRows, TOTAL_TICKS);
+        towerTicks.current = buildEntityTickMaps(towerSeries.map((t) => ({ id: t.id, rows: t.util })), TOTAL_TICKS);
+        trafficTicks.current = buildEntityTickMaps(towerSeries.map((t) => ({ id: t.id, rows: t.traffic })), TOTAL_TICKS);
+        failureTicks.current = buildEntityTickMaps(towerSeries.map((t) => ({ id: t.id, rows: t.failures })), TOTAL_TICKS);
+        edgeTicks.current = buildEntityTickMaps(edgeSeries.map((e) => ({ id: e.id, rows: e.telemetry })), TOTAL_TICKS);
+
+        // Downsampled latency/bandwidth series for the Simulation Replay chart — computed once
+        // from the same fleet arrays above, not a separate fetch or timer.
+        const SAMPLE_COUNT = 100;
+        const series: DailyPoint[] = [];
+        for (let i = 0; i < SAMPLE_COUNT; i++) {
+          const sampleTick = Math.floor((i / (SAMPLE_COUNT - 1)) * (TOTAL_TICKS - 1));
+          const health = healthTicks.current[sampleTick];
+          const towersAtTick = towerTicks.current[sampleTick];
+          let bandwidth = 0;
+          if (towersAtTick && towersAtTick.size > 0) {
+            let sum = 0;
+            towersAtTick.forEach((t) => { sum += t.available_bandwidth_mbps; });
+            bandwidth = sum / towersAtTick.size;
+          }
+          series.push({ hour: (i / SAMPLE_COUNT) * 24, latency: health?.latency_ms ?? 0, bandwidth });
+        }
+        setDailySeries(series);
+      } catch {
+        // services/api/client.ts already raised a toast — don't let a fleet-load failure
+        // block the dashboard forever.
+      } finally {
+        if (!cancelled) setFleetLoading(false);
+      }
+    }
+
+    loadFleet();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
-    if (isPlaying && !isLoading) {
+    if (isPlaying && !fleetLoading) {
       intervalRef.current = setInterval(() => {
         setCurrentTick((prev) => {
           if (prev >= TOTAL_TICKS - 1) { setIsPlaying(false); return prev; }
@@ -216,10 +284,10 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }, 1000 / speedRef.current);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [isPlaying, isLoading, speed]);
+  }, [isPlaying, fleetLoading, speed]);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (fleetLoading) return;
     const tick = currentTick;
     const tData = towerTicks.current[tick] || new Map();
     const fData = failureTicks.current[tick] || new Map();
@@ -231,7 +299,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (newEvents.length > 0) {
       setEvents((prev) => [...prev.slice(-200), ...newEvents]);
     }
-  }, [currentTick, isLoading]);
+  }, [currentTick, fleetLoading]);
 
   const play = useCallback(() => setIsPlaying(true), []);
   const pause = useCallback(() => setIsPlaying(false), []);
@@ -239,23 +307,13 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const setSpeed = useCallback((s: number) => setSpeedState(s), []);
   const seekTo = useCallback((tick: number) => setCurrentTick(Math.max(0, Math.min(tick, TOTAL_TICKS - 1))), []);
 
-  // Unified playback: currentTick (driven solely by the existing play/pause/speed/seekTo
-  // controls below) maps onto the 24h mock replay frame set — this is the ONE simulation
-  // driver. No separate replay state; the timeline panel just reads/seeks the same `state`.
-  const replayFrameIndex = Math.min(
-    MOCK_TIMELINE_FRAMES.length - 1,
-    Math.floor((currentTick / (TOTAL_TICKS - 1)) * MOCK_TIMELINE_FRAMES.length)
-  );
-  const replayFrame = MOCK_TIMELINE_FRAMES[replayFrameIndex];
+  const tick = currentTick;
+  const towerData = towerTicks.current[tick] || new Map();
+  const trafficData = trafficTicks.current[tick] || new Map();
+  const failureData = failureTicks.current[tick] || new Map();
+  const edgeData = edgeTicks.current[tick] || new Map();
+  const healthData = healthTicks.current[tick] || null;
 
-  const towerData = replayFrame.towerData;
-  const trafficData = trafficTicks.current[currentTick] || new Map();
-  const failureData = replayFrame.failureData;
-  const edgeData = replayFrame.edgeData;
-  const healthData = replayFrame.healthData;
-
-  // History (feeds the Tower Utilization chart) is always sourced from the real tick engine,
-  // regardless of replay — it intentionally keeps showing genuine historical data.
   const historyStart = Math.max(0, currentTick - MAX_HISTORY);
   const healthHistory = healthTicks.current.slice(historyStart, currentTick + 1);
   const towerHistory = new Map<string, TowerUtilizationRow[]>();
@@ -274,9 +332,8 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (m) m.forEach((v) => trafficHistory.push(v));
   }
 
-  // Continuously-interpolated 24h clock (independent of the coarser 96-frame data granularity)
-  // so the replay cursor/timestamp move smoothly, matching the same "2026-01-01 HH:MM:SS" shape
-  // existing consumers (SimulationControls, AlertsIncidentsPanel, NodeDetailPanel) already parse.
+  // Continuously-interpolated 24h clock, independent of the fleet's real (coarser) sample
+  // spacing, so the header/replay timestamp always moves smoothly across the tick range.
   const simSeconds = Math.floor((currentTick / (TOTAL_TICKS - 1)) * SECONDS_PER_DAY);
   const clockStr = [
     Math.floor(simSeconds / 3600) % 24,
@@ -292,10 +349,87 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
   const controls: SimulationControls = { play, pause, reset, setSpeed, seekTo };
 
+  // ── AI decision-loop layer — live WebSocket, single aggregate simulated entity. ────────────
+  const { status: connectionStatus, lastMessage } = useWebSocket(`${WS_BASE_URL}/ws/network`);
+
+  const [hasReceivedFirstFrame, setHasReceivedFirstFrame] = useState(false);
+  const [aiDecisions, setAiDecisions] = useState<AiDecisionItem[]>([]);
+  const [prediction, setPrediction] = useState<PredictionSummary | null>(null);
+  const [strategies, setStrategies] = useState<StrategySummary | null>(null);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [assistantInsight, setAssistantInsight] = useState<AssistantInsight | null>(null);
+
+  const [isReplaying, setIsReplaying] = useState(false);
+  const [isReplayLoading, setIsReplayLoading] = useState(false);
+  const [replaySnapshots, setReplaySnapshots] = useState<NetworkSnapshotResponse[]>([]);
+
+  useEffect(() => {
+    if (isReplaying || !lastMessage || typeof lastMessage !== 'object') return;
+    const msg = lastMessage as NetworkWsMessage;
+    if (!('telemetry' in msg) || !('prediction' in msg)) return; // guard malformed frames
+
+    setHasReceivedFirstFrame(true);
+    setPrediction(adaptPrediction(msg.prediction));
+    const stratSummary = adaptStrategies(msg.strategies);
+    setStrategies(stratSummary);
+    setAssistantInsight(adaptInsight(msg.explainability, msg.timestamp));
+
+    setAiDecisions((prev) => {
+      const liveItem = adaptExecutionReport(msg.execution, msg.id);
+      const queuedItem = stratSummary.topCandidate ? strategyToQueuedDecision(stratSummary.topCandidate) : null;
+      const rest = prev.filter((d) => d.id !== liveItem.id && d.id !== queuedItem?.id);
+      return [liveItem, ...(queuedItem ? [queuedItem] : []), ...rest].slice(0, 20);
+    });
+
+    const now = Date.now();
+    setAlerts((prev) => {
+      const fresh = prev.filter((a) => now - new Date(a.detectedAt).getTime() < ALERT_TTL_MS);
+      if (!msg.scenario) return fresh;
+      const alert = adaptScenarioMetadata(msg.scenario);
+      return [alert, ...fresh.filter((a) => a.id !== alert.id)].slice(0, 20);
+    });
+  }, [lastMessage, isReplaying]);
+
+  const enterReplay = useCallback(() => {
+    setIsReplayLoading(true);
+    getSnapshotHistory(100)
+      .then((history) => {
+        // Backend returns newest-first — reverse to chronological to match the tick engine.
+        setReplaySnapshots([...history].reverse());
+        setIsReplaying(true);
+      })
+      .catch(() => {
+        // client.ts already raised a toast — stay in live mode.
+      })
+      .finally(() => setIsReplayLoading(false));
+  }, []);
+
+  const exitReplay = useCallback(() => setIsReplaying(false), []);
+
+  // While replaying, prediction/strategies (embedded directly in each snapshot) track the
+  // scrubbed position via the SAME currentTick the fleet layer already uses — one controller,
+  // one frame. aiDecisions/alerts/assistantInsight have no reliable per-snapshot correlation in
+  // the backend schema (ExecutionHistory/ScenarioHistory aren't keyed by snapshot_id), so they
+  // stay frozen at their last live value during replay rather than being guessed at.
+  let effectivePrediction = prediction;
+  let effectiveStrategies = strategies;
+  if (isReplaying && replaySnapshots.length > 0) {
+    const lastIdx = replaySnapshots.length - 1;
+    const snapIdx = lastIdx === 0 ? 0 : Math.min(lastIdx, Math.floor((currentTick / (TOTAL_TICKS - 1)) * lastIdx));
+    const snapshot = replaySnapshots[snapIdx];
+    effectivePrediction = adaptPrediction(snapshot.prediction);
+    effectiveStrategies = adaptStrategies(snapshot.strategies);
+  }
+
+  const isLoading = fleetLoading || !hasReceivedFirstFrame;
+
   return (
     <SimulationContext.Provider value={{
       state, controls, events, selectedNode, setSelectedNode, filters, setFilters, isLoading,
-      replayFrames: MOCK_TIMELINE_FRAMES,
+      connectionStatus,
+      aiDecisions, prediction: effectivePrediction, strategies: effectiveStrategies, alerts, assistantInsight,
+      isReplaying, isReplayLoading, replaySnapshotCount: replaySnapshots.length, enterReplay, exitReplay,
+      dailySeries,
     }}>
       {children}
     </SimulationContext.Provider>
