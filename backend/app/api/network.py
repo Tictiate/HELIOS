@@ -93,3 +93,26 @@ def get_network_health(
     db: Session = Depends(get_db)
 ):
     return network_crud.get_network_health(db, skip=skip, limit=limit)
+
+from app.crud import snapshot as crud_snapshot
+from app.schemas.snapshot import NetworkSnapshotResponse
+import uuid
+
+@router.get("/latest", response_model=NetworkSnapshotResponse)
+def get_latest_network_snapshot(db: Session = Depends(get_db)):
+    snapshot = crud_snapshot.get_latest_snapshot(db)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="No network snapshots found.")
+    return snapshot
+
+@router.get("/history", response_model=List[NetworkSnapshotResponse])
+def get_network_snapshot_history(limit: int = 100, db: Session = Depends(get_db)):
+    snapshots = crud_snapshot.get_snapshot_history(db, limit=limit)
+    return snapshots
+
+@router.get("/snapshot/{snapshot_id}", response_model=NetworkSnapshotResponse)
+def get_network_snapshot(snapshot_id: uuid.UUID, db: Session = Depends(get_db)):
+    snapshot = crud_snapshot.get_snapshot_by_id(db, snapshot_id=snapshot_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Snapshot not found.")
+    return snapshot
