@@ -1,4 +1,5 @@
 import React from 'react';
+import { FiPlay, FiPause, FiRotateCcw } from 'react-icons/fi';
 import { useSimulation } from '../context/SimulationContext';
 
 const SimulationControls: React.FC = () => {
@@ -15,10 +16,10 @@ const SimulationControls: React.FC = () => {
           onClick={state.isPlaying ? controls.pause : controls.play}
           title={state.isPlaying ? 'Pause' : 'Play'}
         >
-          {state.isPlaying ? '⏸' : '▶'}
+          {state.isPlaying ? <FiPause className="icon icon-sm" /> : <FiPlay className="icon icon-sm" />}
         </button>
         <button className="sim-btn" onClick={controls.reset} title="Reset">
-          ⟲
+          <FiRotateCcw className="icon icon-sm" />
         </button>
       </div>
 
@@ -46,7 +47,8 @@ const SimulationControls: React.FC = () => {
       </div>
 
       {/* Timestamp */}
-      <div style={{ color: 'var(--accent-cyan)', fontSize: '12px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace' }}>
+      <div className="toolbar-divider h-6" />
+      <div style={{ color: 'var(--accent-cyan)', fontSize: '12px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
         {state.timestamp.split(' ')[1] || '00:00:00'}
       </div>
     </div>

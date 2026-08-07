@@ -1,33 +1,33 @@
 import React, { useMemo } from 'react';
+import type { IconType } from 'react-icons';
+import { FiHeart, FiZap, FiActivity, FiWifi, FiBattery, FiCheckCircle } from 'react-icons/fi';
 import { useSimulation } from '../context/SimulationContext';
+import AnimatedNumber from './common/AnimatedNumber';
 
 interface KPICardProps {
   title: string;
-  value: string;
+  value: number | null;
+  decimals: number;
   unit: string;
   status: 'green' | 'yellow' | 'red';
-  icon: string;
+  icon: IconType;
 }
 
-const KPICard: React.FC<KPICardProps> = ({ title, value, unit, status, icon }) => (
+const KPICard: React.FC<KPICardProps> = ({ title, value, decimals, unit, status, icon: Icon }) => (
   <div className="kpi-card">
-    <div className="flex items-center justify-between mb-2">
-      <span style={{ color: 'var(--text-muted)', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-        {title}
-      </span>
+    <div className="flex items-center justify-between mb-2.5">
+      <span className="label-caps-sm">{title}</span>
       <div className="flex items-center gap-2">
-        <span style={{ fontSize: '14px' }}>{icon}</span>
+        <Icon className="icon icon-sm" style={{ color: 'var(--text-muted)' }} />
         <span className={`indicator-dot ${status}`} />
       </div>
     </div>
     <div className="flex items-baseline gap-1">
-      <span
-        key={value}
-        className="animate-value-update"
-        style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}
-      >
-        {value}
-      </span>
+      {value === null ? (
+        <span className="metric-value" style={{ fontSize: '24px' }}>--</span>
+      ) : (
+        <AnimatedNumber value={value} decimals={decimals} className="metric-value" style={{ fontSize: '24px' }} />
+      )}
       <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>{unit}</span>
     </div>
   </div>
@@ -49,15 +49,15 @@ const KPIPanel: React.FC = () => {
   const { state } = useSimulation();
   const h = state.healthData;
 
-  const cards = useMemo((): KPICardProps[] => {
+  const cards = useMemo((): (Omit<KPICardProps, 'value'> & { value: number | null })[] => {
     if (!h) {
       return [
-        { title: 'Health Score', value: '--', unit: '', status: 'green', icon: '💚' },
-        { title: 'Latency', value: '--', unit: 'ms', status: 'green', icon: '⚡' },
-        { title: 'Packet Loss', value: '--', unit: '%', status: 'green', icon: '📡' },
-        { title: 'Bandwidth', value: '--', unit: 'Mbps', status: 'green', icon: '📶' },
-        { title: 'Power Usage', value: '--', unit: '%', status: 'green', icon: '🔋' },
-        { title: 'Availability', value: '--', unit: '%', status: 'green', icon: '✅' },
+        { title: 'Health Score', value: null, decimals: 1, unit: '/100', status: 'green', icon: FiHeart },
+        { title: 'Latency', value: null, decimals: 1, unit: 'ms', status: 'green', icon: FiZap },
+        { title: 'Packet Loss', value: null, decimals: 2, unit: '%', status: 'green', icon: FiActivity },
+        { title: 'Bandwidth', value: null, decimals: 1, unit: 'Mbps', status: 'green', icon: FiWifi },
+        { title: 'Power Usage', value: null, decimals: 1, unit: '%', status: 'green', icon: FiBattery },
+        { title: 'Availability', value: null, decimals: 1, unit: '%', status: 'green', icon: FiCheckCircle },
       ];
     }
 
@@ -73,45 +73,51 @@ const KPIPanel: React.FC = () => {
     return [
       {
         title: 'Health Score',
-        value: h.network_health_score.toFixed(1),
+        value: h.network_health_score,
+        decimals: 1,
         unit: '/100',
         status: getStatusInverse(h.network_health_score, [40, 70]),
-        icon: '💚',
+        icon: FiHeart,
       },
       {
         title: 'Latency',
-        value: h.latency_ms.toFixed(1),
+        value: h.latency_ms,
+        decimals: 1,
         unit: 'ms',
         status: getStatus(h.latency_ms, [20, 40]),
-        icon: '⚡',
+        icon: FiZap,
       },
       {
         title: 'Packet Loss',
-        value: h.packet_loss_pct.toFixed(2),
+        value: h.packet_loss_pct,
+        decimals: 2,
         unit: '%',
         status: getStatus(h.packet_loss_pct, [2, 4]),
-        icon: '📡',
+        icon: FiActivity,
       },
       {
         title: 'Bandwidth',
-        value: avgBw.toFixed(1),
+        value: avgBw,
+        decimals: 1,
         unit: 'Mbps',
         status: getStatusInverse(avgBw, [40, 70]),
-        icon: '📶',
+        icon: FiWifi,
       },
       {
         title: 'Power Usage',
-        value: h.energy_usage_pct.toFixed(1),
+        value: h.energy_usage_pct,
+        decimals: 1,
         unit: '%',
         status: getStatus(h.energy_usage_pct, [60, 80]),
-        icon: '🔋',
+        icon: FiBattery,
       },
       {
         title: 'Availability',
-        value: h.availability_pct.toFixed(1),
+        value: h.availability_pct,
+        decimals: 1,
         unit: '%',
         status: getStatusInverse(h.availability_pct, [95, 98]),
-        icon: '✅',
+        icon: FiCheckCircle,
       },
     ];
   }, [h, state.towerData]);

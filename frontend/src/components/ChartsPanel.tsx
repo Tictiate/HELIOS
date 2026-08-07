@@ -18,45 +18,59 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarEleme
 const baseOptions = {
   responsive: true,
   maintainAspectRatio: false,
-  animation: { duration: 300 } as const,
+  animation: { duration: 300, easing: 'easeOutQuart' } as const,
+  interaction: { mode: 'index' as const, intersect: false },
   plugins: {
     legend: {
       display: true,
       position: 'top' as const,
       labels: {
         color: '#94a3b8',
-        font: { size: 10, family: 'Inter' },
-        boxWidth: 8,
-        padding: 8,
+        font: { size: 10, family: 'Inter', weight: 500 as const },
+        boxWidth: 7,
+        boxHeight: 7,
+        padding: 10,
         usePointStyle: true,
         pointStyle: 'circle' as const,
       },
     },
     tooltip: {
-      backgroundColor: 'rgba(15, 23, 42, 0.9)',
+      backgroundColor: 'rgba(10, 16, 32, 0.95)',
       titleColor: '#f1f5f9',
       bodyColor: '#94a3b8',
-      borderColor: 'rgba(148, 163, 184, 0.2)',
+      borderColor: 'rgba(148, 163, 184, 0.15)',
       borderWidth: 1,
-      cornerRadius: 8,
-      titleFont: { size: 11, family: 'Inter' },
+      cornerRadius: 10,
+      titleFont: { size: 11, family: 'Inter', weight: 600 as const },
       bodyFont: { size: 10, family: 'Inter' },
       padding: 10,
+      boxPadding: 4,
+      displayColors: true,
+      usePointStyle: true,
     },
   },
   scales: {
     x: {
       ticks: { color: '#64748b', font: { size: 9, family: 'Inter' }, maxTicksLimit: 8 },
-      grid: { color: 'rgba(148, 163, 184, 0.05)' },
-      border: { color: 'rgba(148, 163, 184, 0.1)' },
+      grid: { color: 'rgba(148, 163, 184, 0.04)' },
+      border: { color: 'rgba(148, 163, 184, 0.08)' },
     },
     y: {
       ticks: { color: '#64748b', font: { size: 9, family: 'Inter' } },
-      grid: { color: 'rgba(148, 163, 184, 0.05)' },
-      border: { color: 'rgba(148, 163, 184, 0.1)' },
+      grid: { color: 'rgba(148, 163, 184, 0.04)' },
+      border: { display: false },
     },
   },
 };
+
+const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <div className="glass-card p-3 h-full flex flex-col">
+    <span className="label-caps" style={{ marginBottom: '10px', flexShrink: 0 }}>
+      {title}
+    </span>
+    <div className="chart-container flex-1">{children}</div>
+  </div>
+);
 
 const LatencyChart: React.FC = () => {
   const { state } = useSimulation();
@@ -74,19 +88,17 @@ const LatencyChart: React.FC = () => {
         tension: 0.4,
         pointRadius: 0,
         pointHoverRadius: 4,
+        pointHoverBackgroundColor: '#22d3ee',
+        pointHoverBorderColor: '#f1f5f9',
+        pointHoverBorderWidth: 2,
       }],
     };
   }, [state.healthHistory]);
 
   return (
-    <div className="glass-card-static p-3 h-full flex flex-col">
-      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
-        Latency vs Time
-      </span>
-      <div className="chart-container flex-1">
-        <Line data={data} options={baseOptions} />
-      </div>
-    </div>
+    <ChartCard title="Latency vs Time">
+      <Line data={data} options={baseOptions} />
+    </ChartCard>
   );
 };
 
@@ -116,19 +128,18 @@ const BandwidthChart: React.FC = () => {
         fill: true,
         tension: 0.4,
         pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHoverBackgroundColor: '#a78bfa',
+        pointHoverBorderColor: '#f1f5f9',
+        pointHoverBorderWidth: 2,
       }],
     };
   }, [state.healthHistory.length, state.towerHistory]);
 
   return (
-    <div className="glass-card-static p-3 h-full flex flex-col">
-      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
-        Bandwidth vs Time
-      </span>
-      <div className="chart-container flex-1">
-        <Line data={data} options={baseOptions} />
-      </div>
-    </div>
+    <ChartCard title="Bandwidth vs Time">
+      <Line data={data} options={baseOptions} />
+    </ChartCard>
   );
 };
 
@@ -156,6 +167,13 @@ const TrafficServiceChart: React.FC = () => {
           'rgba(251, 191, 36, 0.7)',
           'rgba(248, 113, 113, 0.7)',
         ],
+        hoverBackgroundColor: [
+          'rgba(167, 139, 250, 0.9)',
+          'rgba(59, 130, 246, 0.9)',
+          'rgba(34, 211, 238, 0.9)',
+          'rgba(251, 191, 36, 0.9)',
+          'rgba(248, 113, 113, 0.9)',
+        ],
         borderColor: [
           '#a78bfa',
           '#3b82f6',
@@ -164,23 +182,19 @@ const TrafficServiceChart: React.FC = () => {
           '#f87171',
         ],
         borderWidth: 1,
-        borderRadius: 4,
+        borderRadius: 5,
+        borderSkipped: false as const,
       }],
     };
   }, [state.trafficData]);
 
   return (
-    <div className="glass-card-static p-3 h-full flex flex-col">
-      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
-        Traffic by Service
-      </span>
-      <div className="chart-container flex-1">
-        <Bar data={data} options={{
-          ...baseOptions,
-          plugins: { ...baseOptions.plugins, legend: { display: false } },
-        }} />
-      </div>
-    </div>
+    <ChartCard title="Traffic by Service">
+      <Bar data={data} options={{
+        ...baseOptions,
+        plugins: { ...baseOptions.plugins, legend: { display: false } },
+      }} />
+    </ChartCard>
   );
 };
 
@@ -222,23 +236,18 @@ const TowerUtilChart: React.FC = () => {
   }, [state.towerHistory]);
 
   return (
-    <div className="glass-card-static p-3 h-full flex flex-col">
-      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
-        Tower Utilization
-      </span>
-      <div className="chart-container flex-1">
-        <Line data={data} options={{
-          ...baseOptions,
-          plugins: {
-            ...baseOptions.plugins,
-            legend: {
-              ...baseOptions.plugins.legend,
-              labels: { ...baseOptions.plugins.legend.labels, font: { size: 8, family: 'Inter' }, boxWidth: 6, padding: 4 },
-            },
+    <ChartCard title="Tower Utilization">
+      <Line data={data} options={{
+        ...baseOptions,
+        plugins: {
+          ...baseOptions.plugins,
+          legend: {
+            ...baseOptions.plugins.legend,
+            labels: { ...baseOptions.plugins.legend.labels, font: { size: 8, family: 'Inter' }, boxWidth: 6, padding: 4 },
           },
-        }} />
-      </div>
-    </div>
+        },
+      }} />
+    </ChartCard>
   );
 };
 
