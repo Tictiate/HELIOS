@@ -12,16 +12,20 @@ Each scenario verifies:
   - Non-empty candidate_strategies
   - Every strategy has all required fields
   - No duplicate strategy names
+  - planning_time_ms exists and is positive
+  - planner_version exists
+  - generated_at exists
+  - rules_triggered is populated
+  - Every strategy has a valid priority
 """
 
 import os
 import sys
-import json
 
 # Ensure the project root is on the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from ai_engine.decision.planner import helios_plan
+from ai_engine.decision.planner import helios_plan, VALID_PRIORITIES
 from ai_engine.decision.strategy_library import REQUIRED_FIELDS
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -145,10 +149,56 @@ def run_tests():
             print(f"  ❌ Duplicate strategies found!")
             failed += 1
 
+        # ── Check 5: planning_time_ms exists and positive ─────────────────
+        pt = result.get("planning_time_ms")
+        if pt is not None and pt > 0:
+            print(f"  ✅ Planning Time: {pt} ms")
+            passed += 1
+        else:
+            print(f"  ❌ planning_time_ms invalid: {pt}")
+            failed += 1
+
+        # ── Check 6: planner_version exists ───────────────────────────────
+        if result.get("planner_version"):
+            print(f"  ✅ Planner Version: {result['planner_version']}")
+            passed += 1
+        else:
+            print(f"  ❌ planner_version missing!")
+            failed += 1
+
+        # ── Check 7: generated_at exists ──────────────────────────────────
+        if result.get("generated_at"):
+            print(f"  ✅ Generated At: {result['generated_at']}")
+            passed += 1
+        else:
+            print(f"  ❌ generated_at missing!")
+            failed += 1
+
+        # ── Check 8: rules_triggered populated ────────────────────────────
+        rt = result.get("rules_triggered", [])
+        if len(rt) > 0:
+            print(f"  ✅ Rules Triggered: {rt}")
+            passed += 1
+        else:
+            print(f"  ❌ rules_triggered is empty!")
+            failed += 1
+
+        # ── Check 9: Every strategy has a valid priority ──────────────────
+        all_priorities_valid = True
+        for s in strategies:
+            if s.get("priority") not in VALID_PRIORITIES:
+                print(f"  ❌ Strategy '{s.get('name')}' has invalid priority: {s.get('priority')}")
+                all_priorities_valid = False
+        if all_priorities_valid:
+            print(f"  ✅ All strategies have valid priority")
+            passed += 1
+        else:
+            failed += 1
+
         # ── Print strategies ──────────────────────────────────────────────
         print(f"\n  Strategies:")
         for s in strategies:
-            print(f"    [{s['strategy_id']}] {s['name']} ({s['category']})")
+            print(f"    [{s['strategy_id']}] {s['name']} ({s['category']}) — {s['priority']}")
 
     # ── Summary ───────────────────────────────────────────────────────────
     total = passed + failed

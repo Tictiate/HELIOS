@@ -42,6 +42,20 @@ REQUIRED_FIELDS = {
     "prerequisites",
     "possible_risks",
     "estimated_execution_time",
+    "priority",
+}
+
+# Deterministic category → priority mapping.
+# The planner MUST NOT sort by priority; the optimizer will use it later.
+CATEGORY_PRIORITY = {
+    "Emergency Response": "CRITICAL",
+    "Failure Recovery": "HIGH",
+    "Congestion": "MEDIUM",
+    "Routing": "MEDIUM",
+    "Edge Computing": "MEDIUM",
+    "Network Slice Management": "MEDIUM",
+    "Load Balancing": "MEDIUM",
+    "Power Optimization": "LOW",
 }
 
 _TEMPLATES: Dict[str, Dict[str, Any]] = {
@@ -59,6 +73,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["available_spectrum"],
         "possible_risks": ["Increased power consumption", "Interference with adjacent cells"],
         "estimated_execution_time": "30 seconds",
+        "priority": "MEDIUM",
     },
 
     "Traffic Redistribution": {
@@ -72,6 +87,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["neighbouring_tower_available"],
         "possible_risks": ["Handover failures", "Temporary latency spike during migration"],
         "estimated_execution_time": "45 seconds",
+        "priority": "MEDIUM",
     },
 
     "Temporary Network Slice": {
@@ -86,6 +102,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["slice_orchestrator_available"],
         "possible_risks": ["Resource contention with existing slices"],
         "estimated_execution_time": "20 seconds",
+        "priority": "MEDIUM",
     },
 
     "Edge Workload Migration": {
@@ -99,6 +116,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["edge_server_available"],
         "possible_risks": ["Service interruption during migration", "Increased WAN latency"],
         "estimated_execution_time": "60 seconds",
+        "priority": "MEDIUM",
     },
 
     "QoS Traffic Shaping": {
@@ -112,6 +130,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["qos_policy_engine"],
         "possible_risks": ["Degraded experience for non-priority users"],
         "estimated_execution_time": "15 seconds",
+        "priority": "MEDIUM",
     },
 
     # ── Failure Recovery ──────────────────────────────────────────────────
@@ -126,6 +145,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["backup_tower_available"],
         "possible_risks": ["Cold-start latency", "Configuration drift"],
         "estimated_execution_time": "90 seconds",
+        "priority": "HIGH",
     },
 
     "Emergency Network Slice": {
@@ -139,6 +159,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["slice_orchestrator_available"],
         "possible_risks": ["Reduced capacity for non-emergency traffic"],
         "estimated_execution_time": "25 seconds",
+        "priority": "CRITICAL",
     },
 
     "Traffic Rerouting": {
@@ -152,6 +173,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["alternative_path_exists"],
         "possible_risks": ["Increased latency on alternate path", "Path congestion"],
         "estimated_execution_time": "30 seconds",
+        "priority": "MEDIUM",
     },
 
     "Disaster Recovery Protocol": {
@@ -165,6 +187,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["dr_site_available", "noc_reachable"],
         "possible_risks": ["Extended failover time", "Data synchronisation lag"],
         "estimated_execution_time": "180 seconds",
+        "priority": "CRITICAL",
     },
 
     "Predictive Component Replacement": {
@@ -178,6 +201,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["spare_components_available", "maintenance_window"],
         "possible_risks": ["Brief downtime during swap"],
         "estimated_execution_time": "300 seconds",
+        "priority": "HIGH",
     },
 
     # ── Power Optimization ────────────────────────────────────────────────
@@ -192,6 +216,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["power_control_supported"],
         "possible_risks": ["Coverage gap at cell edge"],
         "estimated_execution_time": "10 seconds",
+        "priority": "LOW",
     },
 
     "Sleep Mode Activation": {
@@ -205,6 +230,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["low_traffic_period"],
         "possible_risks": ["Delayed wake-up if traffic surges"],
         "estimated_execution_time": "5 seconds",
+        "priority": "LOW",
     },
 
     # ── Load Balancing ────────────────────────────────────────────────────
@@ -219,6 +245,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["neighbouring_tower_available"],
         "possible_risks": ["Ping-pong handovers"],
         "estimated_execution_time": "40 seconds",
+        "priority": "MEDIUM",
     },
 
     "Edge Load Rebalancing": {
@@ -232,6 +259,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["edge_server_available"],
         "possible_risks": ["Temporary service disruption"],
         "estimated_execution_time": "50 seconds",
+        "priority": "MEDIUM",
     },
 
     # ── Network Slice Management ──────────────────────────────────────────
@@ -246,6 +274,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["slice_orchestrator_available"],
         "possible_risks": ["Brief QoS degradation during reconfiguration"],
         "estimated_execution_time": "35 seconds",
+        "priority": "MEDIUM",
     },
 
     # ── Routing ───────────────────────────────────────────────────────────
@@ -260,6 +289,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["sdn_controller_available"],
         "possible_risks": ["Route flapping if metrics oscillate"],
         "estimated_execution_time": "20 seconds",
+        "priority": "MEDIUM",
     },
 
     # ── Edge Computing ────────────────────────────────────────────────────
@@ -274,6 +304,7 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
         "prerequisites": ["edge_server_available", "content_prediction_model"],
         "possible_risks": ["Cache pollution if prediction is inaccurate"],
         "estimated_execution_time": "120 seconds",
+        "priority": "LOW",
     },
 }
 

@@ -6,6 +6,7 @@ strategy generation, deduplication, and validation into a single
 ``plan()`` call that returns a JSON-serialisable result.
 """
 
+import time
 import logging
 import datetime
 from typing import Dict, Any, List
@@ -22,6 +23,9 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+PLANNER_VERSION = "1.0.0"
+VALID_PRIORITIES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
 
 
 class StrategyPlanner:
@@ -118,10 +122,10 @@ class StrategyPlanner:
     @staticmethod
     def validate_candidates(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Ensures every candidate has the full required schema.
+        Ensures every candidate has the full required schema including priority.
 
         Raises:
-            ValueError: If any candidate is malformed.
+            ValueError: If any candidate is malformed or has an invalid priority.
         """
         for idx, c in enumerate(candidates):
             if not validate_strategy(c):
@@ -129,7 +133,51 @@ class StrategyPlanner:
                     f"Candidate strategy at index {idx} is missing required "
                     f"fields. Got keys: {set(c.keys())}"
                 )
+            if c.get("priority") not in VALID_PRIORITIES:
+                raise ValueError(
+                    f"Candidate strategy '{c.get('name')}' at index {idx} has "
+                    f"invalid priority '{c.get('priority')}'. "
+                    f"Must be one of {VALID_PRIORITIES}."
+                )
         return candidates
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Step 6 — Validate result metadata
+    # ──────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def validate_result(result: Dict[str, Any]) -> None:
+        """
+        Post-assembly validation of the complete planning result.
+
+        Raises:
+            ValueError: If any metadata field is missing or invalid.
+        """
+        if not result.get("planner_version"):
+            raise ValueError("planner_version is missing from planning result.")
+        if not result.get("generated_at"):
+            raise ValueError("generated_at is missing from planning result.")
+
+        planning_time = result.get("planning_time_ms")
+        if planning_time is None or planning_time <= 0:
+            raise ValueError(
+                f"planning_time_ms must be positive, got {planning_time}."
+            )
+
+        strategies = result.get("candidate_strategies", [])
+        rules_triggered = result.get("rules_triggered", [])
+
+        if strategies and not rules_triggered:
+            raise ValueError(
+                "rules_triggered must not be empty when candidate_strategies exist."
+            )
+
+        for idx, s in enumerate(strategies):
+            if "priority" not in s:
+                raise ValueError(
+                    f"Strategy at index {idx} ('{s.get('name')}') is missing "
+                    f"'priority' field."
+                )
 
     # ──────────────────────────────────────────────────────────────────────
     # Full pipeline
@@ -144,13 +192,17 @@ class StrategyPlanner:
         3. Identify goal
         4. Generate candidate strategies
         5. Deduplicate
-        6. Validate
-        7. Return structured result
+        6. Validate candidates
+        7. Assemble result with metadata
+        8. Validate result
+        9. Return structured result
 
         Returns:
-            A dict with ``tower_id``, ``planning_goal``, ``candidate_strategies``,
-            and ``timestamp``.
+            A dict with ``tower_id``, ``planner_version``, ``generated_at``,
+            ``planning_time_ms``, ``rules_triggered``, ``planning_goal``,
+            and ``candidate_strategies``.
         """
+        start = time.perf_counter()
         logger.info("Strategy Planner started")
 
         # 1. Detect problem
@@ -164,7 +216,10 @@ class StrategyPlanner:
 
         # 2. Evaluate rules
         triggered = evaluate_rules(prediction_output)
-        logger.info("%d planning rule(s) triggered", len(triggered))
+        rule_names = [t.rule.name for t in triggered]
+        logger.info("%d planning rule(s) triggered:", len(triggered))
+        for name in rule_names:
+            logger.info("  ✓ %s", name)
 
         # 3. Identify goal
         goal = self.identify_goal(triggered)
@@ -176,19 +231,30 @@ class StrategyPlanner:
         # 5. Deduplicate
         candidates = self.remove_duplicate_candidates(candidates)
 
-        # 6. Validate
+        # 6. Validate candidates
         candidates = self.validate_candidates(candidates)
         logger.info("%d unique candidate strategies generated", len(candidates))
 
         # 7. Assemble result
+        elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
+
         result = {
             "tower_id": prediction_output.get("tower_id", "Unknown"),
+            "planner_version": PLANNER_VERSION,
+            "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+            "planning_time_ms": elapsed_ms,
+            "rules_triggered": rule_names,
             "planning_goal": goal,
             "candidate_strategies": candidates,
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
         }
 
-        logger.info("Strategy Planner finished")
+        # 8. Validate result
+        self.validate_result(result)
+
+        logger.info(
+            "Strategy Planner finished — planning completed in %.2f ms",
+            elapsed_ms,
+        )
         return result
 
 
