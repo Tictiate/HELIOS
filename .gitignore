@@ -64,13 +64,11 @@ temp/
 *.orig
 
 # Machine learning / AI artifacts
-*.pkl
 *.joblib
 *.h5
 *.pt
 *.pth
 *.onnx
-models/
 checkpoints/
 artifacts/
 outputs/

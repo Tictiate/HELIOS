@@ -1,0 +1,21 @@
+{
+    "Model Name": "Failure Prediction Model",
+    "Algorithm": "RandomForestClassifier",
+    "Training Date": "2026-08-07T08:37:50.109749Z",
+    "Feature List": [
+        "cpu_temperature_ratio",
+        "power_temperature_ratio",
+        "traffic_pressure",
+        "weather_encoded",
+        "failure_risk_score"
+    ],
+    "Scaler Used": "MinMaxScaler",
+    "Accuracy": 0.815,
+    "Precision": 0.35294117647058826,
+    "Recall": 0.1875,
+    "F1": 0.24489795918367346,
+    "ROC AUC": 0.8225446428571429,
+    "Version": "1.0",
+    "Model Path": "ai_engine/models/failure_v1.pkl",
+    "Scaler Path": "ai_engine/models/failure_scaler.pkl"
+}
