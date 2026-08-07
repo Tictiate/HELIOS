@@ -116,3 +116,43 @@ def get_network_snapshot(snapshot_id: uuid.UUID, db: Session = Depends(get_db)):
     if not snapshot:
         raise HTTPException(status_code=404, detail="Snapshot not found.")
     return snapshot
+
+# ── Execution History ─────────────────────────────────────────────────────
+from app.crud import execution as crud_execution
+from app.schemas.execution import ExecutionHistoryResponse
+
+@router.get("/executions/latest", response_model=ExecutionHistoryResponse)
+def get_latest_execution(db: Session = Depends(get_db)):
+    execution = crud_execution.get_latest_execution(db)
+    if not execution:
+        raise HTTPException(status_code=404, detail="No execution records found.")
+    return execution
+
+@router.get("/executions/history", response_model=List[ExecutionHistoryResponse])
+def get_execution_history(limit: int = 100, db: Session = Depends(get_db)):
+    return crud_execution.get_execution_history(db, limit=limit)
+
+@router.get("/executions/{execution_id}", response_model=ExecutionHistoryResponse)
+def get_execution(execution_id: uuid.UUID, db: Session = Depends(get_db)):
+    execution = crud_execution.get_execution_by_id(db, execution_id=execution_id)
+    if not execution:
+        raise HTTPException(status_code=404, detail="Execution record not found.")
+    return execution
+
+# ── Explainability ────────────────────────────────────────────────────────
+from app.crud import explainability as crud_explainability
+from app.schemas.explainability import ExplainabilityHistoryResponse
+
+@router.get("/explain/latest", response_model=ExplainabilityHistoryResponse)
+def get_latest_explainability(db: Session = Depends(get_db)):
+    explainability = crud_explainability.get_latest_explainability(db)
+    if not explainability:
+        raise HTTPException(status_code=404, detail="No explanations found.")
+    return explainability
+
+@router.get("/explain/{snapshot_id}", response_model=ExplainabilityHistoryResponse)
+def get_explainability(snapshot_id: uuid.UUID, db: Session = Depends(get_db)):
+    explainability = crud_explainability.get_explainability_by_snapshot_id(db, snapshot_id=snapshot_id)
+    if not explainability:
+        raise HTTPException(status_code=404, detail="Explanation not found for the given snapshot.")
+    return explainability
