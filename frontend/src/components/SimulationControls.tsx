@@ -48,8 +48,23 @@ const SimulationControls: React.FC = () => {
 
       {/* Timestamp */}
       <div className="toolbar-divider h-6" />
-      <div style={{ color: 'var(--accent-cyan)', fontSize: '12px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
-        {state.timestamp.split(' ')[1] || '00:00:00'}
+      <div style={{ textAlign: 'right' }}>
+        <div style={{ fontSize: '8px', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          Simulation Time
+        </div>
+        <div style={{ color: 'var(--accent-cyan)', fontSize: '12px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
+          {state.timestamp.split(' ')[1] || '00:00:00'}
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5" style={{
+        padding: '3px 8px', borderRadius: '10px',
+        background: state.isPlaying ? 'rgba(52, 211, 153, 0.12)' : 'rgba(148, 163, 184, 0.1)',
+        border: `1px solid ${state.isPlaying ? 'rgba(52, 211, 153, 0.3)' : 'rgba(148, 163, 184, 0.2)'}`,
+      }}>
+        <span className={`indicator-dot ${state.isPlaying ? 'green' : ''}`} style={{ width: 5, height: 5, background: state.isPlaying ? undefined : '#64748b', boxShadow: state.isPlaying ? undefined : 'none' }} />
+        <span style={{ fontSize: '9px', fontWeight: 700, color: state.isPlaying ? '#34d399' : 'var(--text-muted)', letterSpacing: '0.05em' }}>
+          {state.isPlaying ? 'LIVE' : 'PAUSED'}
+        </span>
       </div>
     </div>
   );

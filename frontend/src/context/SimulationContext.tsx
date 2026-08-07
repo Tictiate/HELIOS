@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useCallback, useEffect, useRef, useState } from 'react';
 import { loadAllData } from '../utils/csvLoader';
+import { MOCK_TIMELINE_FRAMES, type MockFrame } from '../components/timeline/MockTimelineData';
 import type {
   TowerUtilizationRow,
   TrafficProfileRow,
@@ -15,7 +16,8 @@ import type {
 } from '../types';
 
 const MAX_HISTORY = 60;
-const TOTAL_TICKS = 1000;
+export const TOTAL_TICKS = 1000;
+const SECONDS_PER_DAY = 86400;
 
 interface SimContextValue {
   state: SimulationState;
@@ -26,6 +28,8 @@ interface SimContextValue {
   filters: FilterState;
   setFilters: React.Dispatch<React.SetStateAction<FilterState>>;
   isLoading: boolean;
+  /** The full 24h mock replay frame set — the single source of truth `state` is derived from. */
+  replayFrames: MockFrame[];
 }
 
 const SimulationContext = createContext<SimContextValue | null>(null);
@@ -235,43 +239,64 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const setSpeed = useCallback((s: number) => setSpeedState(s), []);
   const seekTo = useCallback((tick: number) => setCurrentTick(Math.max(0, Math.min(tick, TOTAL_TICKS - 1))), []);
 
-  const tick = currentTick;
-  const towerData = towerTicks.current[tick] || new Map();
-  const trafficData = trafficTicks.current[tick] || new Map();
-  const failureData = failureTicks.current[tick] || new Map();
-  const edgeData = edgeTicks.current[tick] || new Map();
-  const healthData = healthTicks.current[tick] || null;
+  // Unified playback: currentTick (driven solely by the existing play/pause/speed/seekTo
+  // controls below) maps onto the 24h mock replay frame set — this is the ONE simulation
+  // driver. No separate replay state; the timeline panel just reads/seeks the same `state`.
+  const replayFrameIndex = Math.min(
+    MOCK_TIMELINE_FRAMES.length - 1,
+    Math.floor((currentTick / (TOTAL_TICKS - 1)) * MOCK_TIMELINE_FRAMES.length)
+  );
+  const replayFrame = MOCK_TIMELINE_FRAMES[replayFrameIndex];
 
-  const historyStart = Math.max(0, tick - MAX_HISTORY);
-  const healthHistory = healthTicks.current.slice(historyStart, tick + 1);
+  const towerData = replayFrame.towerData;
+  const trafficData = trafficTicks.current[currentTick] || new Map();
+  const failureData = replayFrame.failureData;
+  const edgeData = replayFrame.edgeData;
+  const healthData = replayFrame.healthData;
+
+  // History (feeds the Tower Utilization chart) is always sourced from the real tick engine,
+  // regardless of replay — it intentionally keeps showing genuine historical data.
+  const historyStart = Math.max(0, currentTick - MAX_HISTORY);
+  const healthHistory = healthTicks.current.slice(historyStart, currentTick + 1);
   const towerHistory = new Map<string, TowerUtilizationRow[]>();
-  for (let i = historyStart; i <= tick; i++) {
+  for (let i = historyStart; i <= currentTick; i++) {
     const m = towerTicks.current[i];
     if (m) m.forEach((v, k) => { if (!towerHistory.has(k)) towerHistory.set(k, []); towerHistory.get(k)!.push(v); });
   }
   const edgeHistory = new Map<string, EdgeServerRow[]>();
-  for (let i = historyStart; i <= tick; i++) {
+  for (let i = historyStart; i <= currentTick; i++) {
     const m = edgeTicks.current[i];
     if (m) m.forEach((v, k) => { if (!edgeHistory.has(k)) edgeHistory.set(k, []); edgeHistory.get(k)!.push(v); });
   }
   const trafficHistory: TrafficProfileRow[] = [];
-  for (let i = historyStart; i <= tick; i++) {
+  for (let i = historyStart; i <= currentTick; i++) {
     const m = trafficTicks.current[i];
     if (m) m.forEach((v) => trafficHistory.push(v));
   }
 
-  const firstTower = towerData.values().next().value;
-  const timestamp = firstTower?.timestamp || '2026-01-01 00:00:00';
+  // Continuously-interpolated 24h clock (independent of the coarser 96-frame data granularity)
+  // so the replay cursor/timestamp move smoothly, matching the same "2026-01-01 HH:MM:SS" shape
+  // existing consumers (SimulationControls, AlertsIncidentsPanel, NodeDetailPanel) already parse.
+  const simSeconds = Math.floor((currentTick / (TOTAL_TICKS - 1)) * SECONDS_PER_DAY);
+  const clockStr = [
+    Math.floor(simSeconds / 3600) % 24,
+    Math.floor(simSeconds / 60) % 60,
+    simSeconds % 60,
+  ].map((n) => String(n).padStart(2, '0')).join(':');
+  const timestamp = `2026-01-01 ${clockStr}`;
 
   const state: SimulationState = {
-    currentTick: tick, isPlaying, speed, timestamp,
+    currentTick, isPlaying, speed, timestamp,
     towerData, trafficData, failureData, edgeData, healthData,
     nodes: nodesRef.current, healthHistory, towerHistory, edgeHistory, trafficHistory,
   };
   const controls: SimulationControls = { play, pause, reset, setSpeed, seekTo };
 
   return (
-    <SimulationContext.Provider value={{ state, controls, events, selectedNode, setSelectedNode, filters, setFilters, isLoading }}>
+    <SimulationContext.Provider value={{
+      state, controls, events, selectedNode, setSelectedNode, filters, setFilters, isLoading,
+      replayFrames: MOCK_TIMELINE_FRAMES,
+    }}>
       {children}
     </SimulationContext.Provider>
   );

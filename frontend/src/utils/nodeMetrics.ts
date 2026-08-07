@@ -42,8 +42,8 @@ export function getEdgeHealthScore(edge: EdgeServerRow): number {
 export type EdgeStatus = 'healthy' | 'high-traffic' | 'warning' | 'critical';
 
 export const EDGE_STATUS_META: Record<EdgeStatus, { label: string; color: string; width: number }> = {
-  healthy: { label: 'Healthy', color: '#34d399', width: 1.5 },
-  'high-traffic': { label: 'High Traffic', color: '#22d3ee', width: 2.25 },
+  healthy: { label: 'Healthy', color: '#67e8f9', width: 1.5 },
+  'high-traffic': { label: 'High Traffic', color: '#3b82f6', width: 2.25 },
   warning: { label: 'Warning', color: '#fbbf24', width: 2.75 },
   critical: { label: 'Critical', color: '#f87171', width: 3.25 },
 };

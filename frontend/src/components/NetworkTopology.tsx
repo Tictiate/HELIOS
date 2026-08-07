@@ -14,15 +14,35 @@ const EDGE_WIDTH_MULTIPLIER: Record<string, number> = { backbone: 1.15, 'critica
 const prefersReducedMotion = (): boolean =>
   typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-function buildStylesheet(): cytoscape.Stylesheet[] {
+function buildStylesheet(reducedMotion: boolean): cytoscape.StylesheetJson {
+  const transitionDuration = reducedMotion ? 0 : 0.45;
   return [
+    // ─── Smooth state transitions (e.g. a recovered node tweening back to green) ──
+    // Note: gradient-array properties (background-gradient-stop-colors) are NOT safely
+    // transition-able in cytoscape's canvas renderer — only scalar color/number properties.
+    {
+      selector: 'node',
+      style: {
+        'transition-property': 'border-color, underlay-opacity, underlay-padding',
+        'transition-duration': transitionDuration,
+        'transition-timing-function': 'ease-out',
+      } as NodeCss,
+    },
+    {
+      selector: 'edge',
+      style: {
+        'transition-property': 'line-color, width, opacity',
+        'transition-duration': transitionDuration,
+        'transition-timing-function': 'ease-out',
+      } as EdgeCss,
+    },
     // ─── Core ──────────────────────────────────────────────────────
     {
       selector: 'node[nodeType="core"]',
       style: {
         'background-fill': 'radial-gradient',
-        'background-gradient-stop-colors': '#fed7aa #ea580c',
-        'background-gradient-stop-positions': '0 100',
+        'background-gradient-stop-colors': ['#fed7aa', '#ea580c'],
+        'background-gradient-stop-positions': [0, 100],
         label: 'data(label)',
         color: '#f8fafc',
         'font-size': '11px',
@@ -49,14 +69,14 @@ function buildStylesheet(): cytoscape.Stylesheet[] {
       selector: 'node[nodeType="tower"]',
       style: {
         'background-fill': 'radial-gradient',
-        'background-gradient-stop-colors': '#93c5fd #3b82f6',
-        'background-gradient-stop-positions': '0 100',
+        'background-gradient-stop-colors': ['#93c5fd', '#3b82f6'],
+        'background-gradient-stop-positions': [0, 100],
         label: 'data(label)',
         color: '#f1f5f9',
         'font-size': '9px',
         'font-weight': 600,
         'text-valign': 'bottom',
-        'text-margin-y': 'data(labelOffset)',
+        'text-margin-y': (ele: cytoscape.NodeSingular) => ele.data('labelOffset') as number,
         width: 36,
         height: 36,
         'border-width': 2,
@@ -74,8 +94,8 @@ function buildStylesheet(): cytoscape.Stylesheet[] {
       selector: 'node[nodeType="edge"]',
       style: {
         'background-fill': 'radial-gradient',
-        'background-gradient-stop-colors': '#6ee7b7 #34d399',
-        'background-gradient-stop-positions': '0 100',
+        'background-gradient-stop-colors': ['#6ee7b7', '#34d399'],
+        'background-gradient-stop-positions': [0, 100],
         label: 'data(label)',
         color: '#f1f5f9',
         'font-size': '9px',
@@ -100,8 +120,8 @@ function buildStylesheet(): cytoscape.Stylesheet[] {
       selector: 'node[nodeType="critical"]',
       style: {
         'background-fill': 'radial-gradient',
-        'background-gradient-stop-colors': '#fca5a5 #ef4444',
-        'background-gradient-stop-positions': '0 100',
+        'background-gradient-stop-colors': ['#fca5a5', '#ef4444'],
+        'background-gradient-stop-positions': [0, 100],
         label: 'data(label)',
         color: '#f8fafc',
         'font-size': '10px',
@@ -130,7 +150,7 @@ function buildStylesheet(): cytoscape.Stylesheet[] {
         color: '#94a3b8',
         'font-size': '8px',
         'text-valign': 'bottom',
-        'text-margin-y': 'data(labelOffset)',
+        'text-margin-y': (ele: cytoscape.NodeSingular) => ele.data('labelOffset') as number,
         width: 18,
         height: 18,
         'border-width': 1,
@@ -144,7 +164,7 @@ function buildStylesheet(): cytoscape.Stylesheet[] {
     {
       selector: '.heatmap-green',
       style: {
-        'background-gradient-stop-colors': '#6ee7b7 #34d399',
+        'background-gradient-stop-colors': ['#6ee7b7', '#34d399'],
         'border-color': 'rgba(52, 211, 153, 0.55)',
         'underlay-color': '#34d399',
         'underlay-opacity': 0.16,
@@ -153,7 +173,7 @@ function buildStylesheet(): cytoscape.Stylesheet[] {
     {
       selector: '.heatmap-yellow',
       style: {
-        'background-gradient-stop-colors': '#fde68a #fbbf24',
+        'background-gradient-stop-colors': ['#fde68a', '#fbbf24'],
         'border-color': 'rgba(251, 191, 36, 0.55)',
         'underlay-color': '#fbbf24',
         'underlay-opacity': 0.18,
@@ -162,7 +182,7 @@ function buildStylesheet(): cytoscape.Stylesheet[] {
     {
       selector: '.heatmap-red',
       style: {
-        'background-gradient-stop-colors': '#fca5a5 #f87171',
+        'background-gradient-stop-colors': ['#fca5a5', '#f87171'],
         'border-color': 'rgba(248, 113, 113, 0.55)',
         'underlay-color': '#f87171',
         'underlay-opacity': 0.2,
@@ -172,7 +192,7 @@ function buildStylesheet(): cytoscape.Stylesheet[] {
       selector: '.failure',
       style: {
         'background-fill': 'radial-gradient',
-        'background-gradient-stop-colors': '#fca5a5 #dc2626',
+        'background-gradient-stop-colors': ['#fca5a5', '#dc2626'],
         'border-color': '#fca5a5',
         'border-width': 4,
         'underlay-color': '#ef4444',
@@ -279,7 +299,7 @@ const NetworkTopology: React.FC = () => {
     const cy = cytoscape({
       container: containerRef.current,
       elements: buildElements(topologyFilters),
-      style: buildStylesheet(),
+      style: buildStylesheet(prefersReducedMotion()),
       layout: { name: 'preset' },
       userZoomingEnabled: true,
       userPanningEnabled: true,
