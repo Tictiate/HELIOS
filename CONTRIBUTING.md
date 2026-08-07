@@ -52,7 +52,7 @@ Examples
 feature/dashboard-ui
 feature/auth-system
 feature/network-simulator
-feature/ai-engine
+feature/ai_engine
 ```
 
 ### Bug Fixes

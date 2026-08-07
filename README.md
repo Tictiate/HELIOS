@@ -162,7 +162,7 @@ HELIOS/
 │   ├── database/
 │   └── main.py
 │
-├── ai-engine/
+├── ai_engine/
 │   ├── intent/
 │   ├── prediction/
 │   ├── decision/
@@ -265,7 +265,7 @@ Responsible for:
 
 ---
 
-## ai-engine/
+## ai_engine/
 
 Responsible for:
 
@@ -396,7 +396,7 @@ main
 │
 ├── frontend
 ├── backend
-├── ai-engine
+├── ai_engine
 └── simulator
 ```
 

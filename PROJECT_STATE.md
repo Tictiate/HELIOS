@@ -339,7 +339,7 @@ Database
 ```
 frontend/
 backend/
-ai-engine/
+ai_engine/
 simulator/
 datasets/
 docs/
