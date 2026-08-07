@@ -1,11 +1,12 @@
 import React, { useRef, useEffect } from 'react';
+import { FiCpu } from 'react-icons/fi';
 import { useSimulation } from '../context/SimulationContext';
 
-const severityIcons: Record<string, string> = {
-  info: '🔵',
-  warning: '🟡',
-  critical: '🔴',
-  success: '🟢',
+const severityDot: Record<string, string> = {
+  info: 'blue',
+  warning: 'yellow',
+  critical: 'red',
+  success: 'green',
 };
 
 const EventLog: React.FC = () => {
@@ -20,22 +21,10 @@ const EventLog: React.FC = () => {
 
   return (
     <div className="glass-card-static h-full flex flex-col overflow-hidden">
-      <div className="px-4 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid var(--glass-border)' }}>
-        <span style={{ fontSize: '14px' }}>🤖</span>
-        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>
-          AI Event Log
-        </span>
-        <span style={{
-          fontSize: '10px',
-          fontWeight: 600,
-          color: 'var(--accent-cyan)',
-          background: 'rgba(34, 211, 238, 0.1)',
-          padding: '2px 8px',
-          borderRadius: '10px',
-          marginLeft: 'auto'
-        }}>
-          {events.length} events
-        </span>
+      <div className="panel-header">
+        <FiCpu className="icon icon-sm" style={{ color: 'var(--accent-cyan)' }} />
+        <span className="label-caps">AI Event Log</span>
+        <span className="panel-badge">{events.length}</span>
       </div>
       <div
         ref={scrollRef}
@@ -49,8 +38,8 @@ const EventLog: React.FC = () => {
         ) : (
           events.slice(-50).map((event) => (
             <div key={event.id} className={`event-item ${event.severity}`}>
-              <div className="flex items-start gap-2">
-                <span style={{ fontSize: '12px', flexShrink: 0 }}>{severityIcons[event.severity]}</span>
+              <div className="flex items-start gap-2.5">
+                <span className={`indicator-dot ${severityDot[event.severity]}`} style={{ marginTop: '4px', flexShrink: 0 }} />
                 <div className="flex-1 min-w-0">
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace', fontWeight: 600 }}>
                     {event.timestamp}

@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { FiSearch } from 'react-icons/fi';
 import { useSimulation } from '../context/SimulationContext';
 import type { NetworkNodeRow } from '../types';
 
@@ -43,9 +45,7 @@ const SearchBar: React.FC = () => {
 
   return (
     <div ref={containerRef} className="relative">
-      <div className="absolute left-3 top-1/2 -translate-y-1/2 opacity-50">
-        🔍
-      </div>
+      <FiSearch className="icon icon-sm absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
       <input
         type="text"
         className="search-input"
@@ -57,30 +57,36 @@ const SearchBar: React.FC = () => {
         }}
         onFocus={() => setIsOpen(true)}
       />
-      
-      {isOpen && results.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-2 glass-card-static py-2 z-50 animate-fade-in shadow-xl shadow-cyan-900/20">
-          {results.map((r) => (
-            <div
-              key={r.node_id}
-              className="px-4 py-2 hover:bg-cyan-900/20 cursor-pointer flex items-center justify-between transition-colors"
-              onClick={() => handleSelect(r.node_id)}
-            >
-              <span style={{ fontSize: '13px', fontWeight: 600 }}>{r.node_id}</span>
-              <span style={{
-                fontSize: '10px',
-                color: 'var(--text-muted)',
-                textTransform: 'uppercase',
-                background: 'rgba(148, 163, 184, 0.1)',
-                padding: '2px 6px',
-                borderRadius: '4px'
-              }}>
-                {r.node_type}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+
+      <AnimatePresence>
+        {isOpen && results.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute top-full left-0 right-0 mt-2 glass-card-static py-1.5 z-50 shadow-xl shadow-cyan-900/20"
+          >
+            {results.map((r) => (
+              <div
+                key={r.node_id}
+                className="px-4 py-2 hover:bg-cyan-500/10 cursor-pointer flex items-center justify-between transition-colors duration-150"
+                onClick={() => handleSelect(r.node_id)}
+              >
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{r.node_id}</span>
+                <span className="label-caps-sm" style={{
+                  background: 'rgba(148, 163, 184, 0.1)',
+                  padding: '2px 7px',
+                  borderRadius: '4px',
+                  letterSpacing: '0.04em',
+                }}>
+                  {r.node_type}
+                </span>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -1,8 +1,20 @@
 import React, { useMemo } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import type { IconType } from 'react-icons';
+import {
+  FiRadio, FiServer, FiShield, FiGlobe, FiUsers, FiX, FiVideo, FiPhoneCall, FiCpu, FiPlay,
+  FiAlertTriangle, FiShare2, FiClock, FiActivity,
+} from 'react-icons/fi';
 import { useSimulation } from '../context/SimulationContext';
+import { getConnectedNodeIds } from '../utils/topology';
+import {
+  getNodeStatus, getTowerUtilization, getTowerHealthScore, getEdgeHealthScore,
+  NODE_STATUS_META, type NodeStatus,
+} from '../utils/nodeMetrics';
+import type { EventSeverity } from '../types';
 
 interface MetricRowProps {
-  label: string;
+  label: React.ReactNode;
   value: string;
   barPercent?: number;
   barColor?: string;
@@ -36,6 +48,32 @@ const MetricRow: React.FC<MetricRowProps> = ({ label, value, barPercent, barColo
   </div>
 );
 
+const TrafficLabel: React.FC<{ icon: IconType; label: string }> = ({ icon: Icon, label }) => (
+  <span className="flex items-center gap-1.5">
+    <Icon className="icon icon-xs" style={{ color: 'var(--text-muted)' }} />
+    {label}
+  </span>
+);
+
+const StatusBadge: React.FC<{ status: NodeStatus }> = ({ status }) => {
+  const meta = NODE_STATUS_META[status];
+  return (
+    <span
+      className="flex items-center gap-1.5"
+      style={{
+        fontSize: '10px', fontWeight: 700, color: meta.color, background: `${meta.color}1a`,
+        border: `1px solid ${meta.color}33`, padding: '3px 8px', borderRadius: '10px',
+        textTransform: 'uppercase', letterSpacing: '0.04em',
+      }}
+    >
+      <span className={`indicator-dot ${status === 'operational' ? 'green' : status === 'degraded' ? 'yellow' : 'red'}`} style={{ width: 5, height: 5 }} />
+      {meta.label}
+    </span>
+  );
+};
+
+const SEVERITY_DOT: Record<EventSeverity, string> = { info: 'blue', warning: 'yellow', critical: 'red', success: 'green' };
+
 function getBarColor(pct: number): string {
   if (pct < 40) return '#34d399';
   if (pct < 70) return '#fbbf24';
@@ -43,7 +81,52 @@ function getBarColor(pct: number): string {
 }
 
 const NodeDetailPanel: React.FC = () => {
-  const { selectedNode, state, setSelectedNode } = useSimulation();
+  const { selectedNode, state, setSelectedNode, events } = useSimulation();
+  const reduceMotion = useReducedMotion();
+
+  const meta = useMemo(() => {
+    if (!selectedNode) return null;
+    const { id, type } = selectedNode;
+
+    if (type === 'tower') {
+      const tower = state.towerData.get(id);
+      if (!tower) return null;
+      const failure = state.failureData.get(id);
+      const failed = failure?.failed === 1;
+      const utilization = getTowerUtilization(tower);
+      return { status: getNodeStatus(failed, utilization), health: getTowerHealthScore(tower, failure) };
+    }
+    if (type === 'edge') {
+      const edge = state.edgeData.get(id);
+      if (!edge) return null;
+      const avgLoad = (edge.cpu_pct + edge.gpu_pct + edge.memory_pct) / 3;
+      return { status: getNodeStatus(false, avgLoad), health: getEdgeHealthScore(edge) };
+    }
+    if (type === 'core') {
+      const h = state.healthData;
+      if (!h) return null;
+      return { status: getNodeStatus(false, 100 - h.network_health_score), health: Math.round(h.network_health_score) };
+    }
+    if (type === 'critical') {
+      const linkedTowers = getConnectedNodeIds(id).filter((n) => state.towerData.has(n));
+      const anyFailed = linkedTowers.some((t) => state.failureData.get(t)?.failed === 1);
+      const avgUtil = linkedTowers.length
+        ? linkedTowers.reduce((sum, t) => sum + getTowerUtilization(state.towerData.get(t)!), 0) / linkedTowers.length
+        : 0;
+      return { status: getNodeStatus(anyFailed, avgUtil), health: anyFailed ? 12 : Math.round(100 - avgUtil) };
+    }
+    return null;
+  }, [selectedNode, state.towerData, state.failureData, state.edgeData, state.healthData]);
+
+  const connectedNodes = useMemo(
+    () => (selectedNode ? getConnectedNodeIds(selectedNode.id) : []),
+    [selectedNode]
+  );
+
+  const nodeAlerts = useMemo(
+    () => (selectedNode ? events.filter((e) => e.nodeId === selectedNode.id).slice(-5).reverse() : []),
+    [events, selectedNode]
+  );
 
   const content = useMemo(() => {
     if (!selectedNode) return null;
@@ -55,12 +138,12 @@ const NodeDetailPanel: React.FC = () => {
       const failure = state.failureData.get(id);
       if (!tower) return null;
 
-      const utilization = Math.min(100, Math.max(0, 100 - tower.available_bandwidth_mbps));
+      const utilization = getTowerUtilization(tower);
       const failProb = failure ? (failure.failed === 1 ? 100 : Math.min(100, failure.cpu_usage_pct * 0.5 + (failure.temperature_c > 50 ? 30 : 0))) : 0;
 
       return (
         <>
-          <MetricRow label="Users" value={tower.users.toString()} barPercent={(tower.users / 2000) * 100} barColor="var(--accent-blue)" />
+          <MetricRow label="Connected Users" value={tower.users.toString()} barPercent={(tower.users / 2000) * 100} barColor="var(--accent-blue)" />
           <MetricRow label="Bandwidth" value={`${tower.available_bandwidth_mbps.toFixed(1)} Mbps`} barPercent={tower.available_bandwidth_mbps} barColor={getBarColor(100 - tower.available_bandwidth_mbps)} />
           <MetricRow label="Latency" value={`${tower.latency_ms.toFixed(1)} ms`} barPercent={(tower.latency_ms / 60) * 100} barColor={getBarColor((tower.latency_ms / 60) * 100)} />
           <MetricRow label="Packet Loss" value={`${tower.packet_loss_pct.toFixed(2)}%`} barPercent={tower.packet_loss_pct * 20} barColor={getBarColor(tower.packet_loss_pct * 20)} />
@@ -70,14 +153,14 @@ const NodeDetailPanel: React.FC = () => {
           <MetricRow label="Failure Risk" value={`${failProb.toFixed(0)}%`} barPercent={failProb} barColor={failProb > 50 ? '#f87171' : failProb > 25 ? '#fbbf24' : '#34d399'} />
           {traffic && (
             <>
-              <div style={{ marginTop: '12px', marginBottom: '8px', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <div className="label-caps-sm" style={{ marginTop: '14px', marginBottom: '6px' }}>
                 Traffic Breakdown
               </div>
-              <MetricRow label="📹 Video" value={traffic.video_users.toString()} barPercent={(traffic.video_users / 700) * 100} barColor="#a78bfa" />
-              <MetricRow label="📞 Voice" value={traffic.voice_users.toString()} barPercent={(traffic.voice_users / 400) * 100} barColor="#3b82f6" />
-              <MetricRow label="📡 IoT" value={traffic.iot_devices.toString()} barPercent={(traffic.iot_devices / 1200) * 100} barColor="#22d3ee" />
-              <MetricRow label="🎮 Gaming" value={traffic.gaming_users.toString()} barPercent={(traffic.gaming_users / 300) * 100} barColor="#fbbf24" />
-              <MetricRow label="🚨 Emergency" value={traffic.emergency_users.toString()} barPercent={(traffic.emergency_users / 20) * 100} barColor="#f87171" />
+              <MetricRow label={<TrafficLabel icon={FiVideo} label="Video" />} value={traffic.video_users.toString()} barPercent={(traffic.video_users / 700) * 100} barColor="#a78bfa" />
+              <MetricRow label={<TrafficLabel icon={FiPhoneCall} label="Voice" />} value={traffic.voice_users.toString()} barPercent={(traffic.voice_users / 400) * 100} barColor="#3b82f6" />
+              <MetricRow label={<TrafficLabel icon={FiCpu} label="IoT" />} value={traffic.iot_devices.toString()} barPercent={(traffic.iot_devices / 1200) * 100} barColor="#22d3ee" />
+              <MetricRow label={<TrafficLabel icon={FiPlay} label="Gaming" />} value={traffic.gaming_users.toString()} barPercent={(traffic.gaming_users / 300) * 100} barColor="#fbbf24" />
+              <MetricRow label={<TrafficLabel icon={FiAlertTriangle} label="Emergency" />} value={traffic.emergency_users.toString()} barPercent={(traffic.emergency_users / 20) * 100} barColor="#f87171" />
             </>
           )}
         </>
@@ -100,36 +183,18 @@ const NodeDetailPanel: React.FC = () => {
 
     if (type === 'critical') {
       return (
-        <div style={{ padding: '16px 0' }}>
-          <div className="flex items-center gap-2 mb-4">
-            <span className="indicator-dot green" />
-            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--accent-green)' }}>Connected</span>
-          </div>
+        <div style={{ padding: '16px 0 4px' }}>
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            Critical infrastructure node with priority routing enabled.
-            Connected to towers T3, T5, T7 with redundant failover paths.
+            Critical infrastructure node with priority routing enabled. Health is derived from the
+            real-time status of its linked towers below.
           </p>
-          <div style={{ marginTop: '12px', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            Linked Towers
-          </div>
-          <div className="flex gap-2 mt-2">
-            {['T3', 'T5', 'T7'].map((t) => (
-              <span key={t} style={{ padding: '4px 10px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.15)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: 600 }}>
-                {t}
-              </span>
-            ))}
-          </div>
         </div>
       );
     }
 
     if (type === 'core') {
       return (
-        <div style={{ padding: '16px 0' }}>
-          <div className="flex items-center gap-2 mb-4">
-            <span className="indicator-dot green" />
-            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--accent-green)' }}>Operational</span>
-          </div>
+        <div style={{ padding: '16px 0 4px' }}>
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
             Central core network hub connecting all 10 towers with backbone links.
             AI-driven traffic management active.
@@ -139,7 +204,7 @@ const NodeDetailPanel: React.FC = () => {
     }
 
     return (
-      <div style={{ padding: '16px 0' }}>
+      <div style={{ padding: '16px 0 4px' }}>
         <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
           User cluster connected to local tower.
         </p>
@@ -149,57 +214,156 @@ const NodeDetailPanel: React.FC = () => {
 
   if (!selectedNode) {
     return (
-      <div className="glass-card-static h-full flex flex-col items-center justify-center p-6" style={{ minWidth: '280px' }}>
-        <span style={{ fontSize: '32px', marginBottom: '12px', opacity: 0.3 }}>📡</span>
-        <span style={{ color: 'var(--text-muted)', fontSize: '12px', textAlign: 'center' }}>
-          Click a node on the topology to view its details
+      <div className="glass-card-static h-full flex flex-col items-center justify-center p-6 text-center" style={{ minWidth: '280px' }}>
+        <motion.div
+          animate={reduceMotion ? undefined : { y: [0, -6, 0] }}
+          transition={reduceMotion ? undefined : { duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+          style={{ position: 'relative', marginBottom: 16 }}
+        >
+          <div style={{
+            width: 56, height: 56, borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(34, 211, 238, 0.12), transparent 70%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <FiShare2 style={{ width: 26, height: 26, color: 'var(--accent-cyan)', opacity: 0.7 }} />
+          </div>
+        </motion.div>
+        <span style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>
+          Select a node to inspect network details
+        </span>
+        <span style={{ color: 'var(--text-muted)', fontSize: '11px', marginTop: '6px', lineHeight: 1.5, maxWidth: '220px' }}>
+          Click any tower, edge server, or infrastructure node on the topology to view live telemetry.
         </span>
       </div>
     );
   }
 
-  const typeLabels: Record<string, { label: string; color: string; icon: string }> = {
-    tower: { label: 'Tower', color: '#3b82f6', icon: '📡' },
-    edge: { label: 'Edge Server', color: '#34d399', icon: '🖥' },
-    critical: { label: 'Critical Infra', color: '#f87171', icon: '🏥' },
-    core: { label: 'Core Network', color: '#fb923c', icon: '🌐' },
-    user: { label: 'User Cluster', color: '#64748b', icon: '👥' },
+  const typeLabels: Record<string, { label: string; color: string; icon: IconType }> = {
+    tower: { label: 'Tower', color: '#3b82f6', icon: FiRadio },
+    edge: { label: 'Edge Server', color: '#34d399', icon: FiServer },
+    critical: { label: 'Critical Infra', color: '#f87171', icon: FiShield },
+    core: { label: 'Core Network', color: '#fb923c', icon: FiGlobe },
+    user: { label: 'User Cluster', color: '#64748b', icon: FiUsers },
   };
 
   const typeInfo = typeLabels[selectedNode.type] || typeLabels.user;
+  const TypeIcon = typeInfo.icon;
 
   return (
-    <div className="glass-card-static h-full flex flex-col animate-slide-in-right overflow-hidden" style={{ minWidth: '280px' }}>
+    <div className="glass-card-static h-full flex flex-col overflow-hidden" style={{ minWidth: '280px' }}>
       {/* Header */}
-      <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--glass-border)' }}>
-        <div className="flex items-center gap-2">
-          <span style={{ fontSize: '16px' }}>{typeInfo.icon}</span>
+      <div className="panel-header justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="icon icon-md" style={{ color: typeInfo.color }}>
+            <TypeIcon className="w-full h-full" />
+          </div>
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
               {selectedNode.id}
             </div>
-            <div style={{ fontSize: '10px', fontWeight: 600, color: typeInfo.color, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            <div className="label-caps-sm" style={{ color: typeInfo.color, marginTop: '1px' }}>
               {typeInfo.label}
             </div>
           </div>
         </div>
-        <button
-          onClick={() => setSelectedNode(null)}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--text-muted)',
-            cursor: 'pointer',
-            fontSize: '18px',
-            padding: '4px',
-          }}
-        >
-          ✕
-        </button>
+        <div className="flex items-center gap-2">
+          {meta && <StatusBadge status={meta.status} />}
+          <button
+            onClick={() => setSelectedNode(null)}
+            className="icon icon-md"
+            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px', transition: 'color var(--dur-base) ease' }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+          >
+            <FiX className="w-full h-full" />
+          </button>
+        </div>
       </div>
+
+      {/* Health score strip */}
+      {meta && (
+        <div className="flex items-center gap-2.5 px-4" style={{ padding: '9px 16px', borderBottom: '1px solid var(--glass-border)' }}>
+          <FiActivity className="icon icon-xs" style={{ color: 'var(--text-muted)' }} />
+          <span className="label-caps-sm" style={{ letterSpacing: 0 }}>Health Score</span>
+          <div className="metric-bar" style={{ flex: 1, margin: 0 }}>
+            <div className="metric-bar-fill" style={{ width: `${meta.health}%`, background: NODE_STATUS_META[meta.status].color }} />
+          </div>
+          <span className="metric-value" style={{ fontSize: '12px', width: 28, textAlign: 'right' }}>{meta.health}</span>
+        </div>
+      )}
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-2">
-        {content}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`${selectedNode.type}-${selectedNode.id}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {content}
+          </motion.div>
+        </AnimatePresence>
+
+        {connectedNodes.length > 0 && (
+          <div style={{ marginTop: '14px' }}>
+            <div className="label-caps-sm" style={{ marginBottom: '6px' }}>Connected Nodes</div>
+            <div className="flex flex-wrap gap-1.5">
+              {connectedNodes.map((n) => (
+                <button
+                  key={n}
+                  onClick={() => {
+                    const node = state.nodes.find((nn) => nn.node_id === n);
+                    setSelectedNode({ id: n, type: node?.node_type ?? (n === 'Control' ? 'core' : n === 'Hospital' ? 'critical' : n.startsWith('U') ? 'user' : n.startsWith('E') ? 'edge' : 'tower') });
+                  }}
+                  style={{
+                    padding: '4px 9px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.12)',
+                    border: '1px solid rgba(59, 130, 246, 0.2)', color: 'var(--accent-blue)', fontSize: '11px',
+                    fontWeight: 600, cursor: 'pointer', transition: 'background var(--dur-fast) ease',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(59, 130, 246, 0.22)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(59, 130, 246, 0.12)')}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {nodeAlerts.length > 0 && (
+          <div style={{ marginTop: '14px' }}>
+            <div className="label-caps-sm" style={{ marginBottom: '6px' }}>Active Alerts</div>
+            <div className="flex flex-col gap-1.5">
+              {nodeAlerts.map((a) => (
+                <div key={a.id} className="flex items-start gap-2">
+                  <span className={`indicator-dot ${SEVERITY_DOT[a.severity]}`} style={{ marginTop: '4px', flexShrink: 0 }} />
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{a.message}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ marginTop: '14px', padding: '10px 0', borderTop: '1px solid rgba(148, 163, 184, 0.08)' }}>
+          <div className="flex items-center gap-1.5" style={{ marginBottom: '3px' }}>
+            <FiCpu className="icon icon-xs" style={{ color: 'var(--accent-cyan)', opacity: 0.7 }} />
+            <span className="label-caps-sm" style={{ letterSpacing: 0 }}>AI Recommendation</span>
+            <span className="panel-badge" style={{ marginLeft: 'auto', fontSize: '9px' }}>Coming Soon</span>
+          </div>
+          <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            Explainable AI guidance for this node isn't connected yet — this panel is reserved for the
+            upcoming recommendation engine.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5" style={{ marginTop: '10px', paddingBottom: '4px' }}>
+          <FiClock className="icon icon-xs" style={{ color: 'var(--text-muted)' }} />
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+            Last updated: {state.timestamp}
+          </span>
+        </div>
       </div>
     </div>
   );

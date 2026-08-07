@@ -9,41 +9,42 @@ const FilterPanel: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       <button
         className={`filter-toggle ${filters.towers ? 'active' : ''}`}
         onClick={() => toggle('towers')}
       >
-        <span className="w-2 h-2 rounded-full bg-blue-500" />
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
         Towers
       </button>
       <button
         className={`filter-toggle ${filters.users ? 'active' : ''}`}
         onClick={() => toggle('users')}
       >
-        <span className="w-2 h-2 rounded-full bg-slate-500" />
+        <span className="w-1.5 h-1.5 rounded-full bg-slate-500 flex-shrink-0" />
         Users
       </button>
       <button
         className={`filter-toggle ${filters.edges ? 'active' : ''}`}
         onClick={() => toggle('edges')}
       >
-        <span className="w-2 h-2 bg-emerald-400 rotate-45" />
+        <span className="w-1.5 h-1.5 bg-emerald-400 rotate-45 flex-shrink-0" />
         Edges
       </button>
       <button
         className={`filter-toggle ${filters.critical ? 'active' : ''}`}
         onClick={() => toggle('critical')}
       >
-        <span className="w-2 h-2 bg-red-400" />
+        <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
         Critical
       </button>
-      <div className="w-px h-4 bg-slate-700/50 mx-1" />
+      <div className="toolbar-divider h-4 mx-1" />
       <button
         className={`filter-toggle ${filters.failures ? 'active' : ''}`}
         onClick={() => toggle('failures')}
       >
-        ⚠️ Failures
+        <span className="w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0" />
+        Failures
       </button>
     </div>
   );

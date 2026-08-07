@@ -1,327 +1,393 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import cytoscape, { type Core, type EventObject } from 'cytoscape';
 import { useSimulation } from '../context/SimulationContext';
+import { buildElements, type TopologyFilters } from '../utils/topology';
+import { getLinkStatus, EDGE_STATUS_META, type EdgeStatus } from '../utils/nodeMetrics';
 
-// Build network topology elements
-function buildElements(filters: { towers: boolean; users: boolean; edges: boolean; critical: boolean }) {
-  const elements: cytoscape.ElementDefinition[] = [];
+type NodeCss = cytoscape.Css.Node & Record<string, unknown>;
+type EdgeCss = cytoscape.Css.Edge & Record<string, unknown>;
 
-  // Core node
-  elements.push({
-    data: { id: 'Control', label: 'Core Network', nodeType: 'core' },
-    position: { x: 400, y: 50 },
-  });
+const LINK_TYPES = new Set(['backbone', 'edge-link', 'critical-link']);
+const LINK_CLASSES = 'link-healthy link-high-traffic link-warning link-critical';
+const EDGE_WIDTH_MULTIPLIER: Record<string, number> = { backbone: 1.15, 'critical-link': 1.05, 'edge-link': 1 };
 
-  // Towers in a semicircle
-  const towerIds = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10'];
-  if (filters.towers) {
-    towerIds.forEach((id, i) => {
-      const angle = (Math.PI / (towerIds.length + 1)) * (i + 1);
-      elements.push({
-        data: { id, label: id, nodeType: 'tower' },
-        position: { x: 400 + Math.cos(angle) * 250 - 200, y: 50 + Math.sin(angle) * 220 },
-      });
-      // Core -> Tower edge
-      elements.push({
-        data: { id: `Control-${id}`, source: 'Control', target: id, edgeType: 'backbone' },
-      });
-    });
-  }
+const prefersReducedMotion = (): boolean =>
+  typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-  // Edge servers
-  if (filters.edges) {
-    const edgeIds = ['E1', 'E2', 'E3', 'E4'];
-    edgeIds.forEach((id, i) => {
-      const angle = (Math.PI / (edgeIds.length + 1)) * (i + 1);
-      elements.push({
-        data: { id, label: id, nodeType: 'edge' },
-        position: { x: 400 + Math.cos(angle) * 160 - 100, y: 300 + Math.sin(angle) * 80 },
-      });
-      // Connect to nearest towers
-      const connectedTowers = towerIds.slice(i * 2, i * 2 + 3);
-      connectedTowers.forEach((tid) => {
-        if (filters.towers) {
-          elements.push({
-            data: { id: `${tid}-${id}`, source: tid, target: id, edgeType: 'edge-link' },
-          });
-        }
-      });
-    });
-  }
-
-  // Hospital (critical infrastructure)
-  if (filters.critical) {
-    elements.push({
-      data: { id: 'Hospital', label: 'Hospital', nodeType: 'critical' },
-      position: { x: 550, y: 350 },
-    });
-    // Connect hospital to some towers
-    if (filters.towers) {
-      ['T3', 'T5', 'T7'].forEach((tid) => {
-        elements.push({
-          data: { id: `${tid}-Hospital`, source: tid, target: 'Hospital', edgeType: 'critical-link' },
-        });
-      });
-    }
-  }
-
-  // User clusters
-  if (filters.users && filters.towers) {
-    towerIds.forEach((tid, i) => {
-      const uid = `U${i + 1}`;
-      const towerEl = elements.find((e) => e.data.id === tid);
-      const tx = towerEl?.position?.x ?? 400;
-      const ty = towerEl?.position?.y ?? 200;
-      elements.push({
-        data: { id: uid, label: `Users ${i + 1}`, nodeType: 'user' },
-        position: { x: tx + (i % 2 === 0 ? 80 : -80), y: ty + 100 },
-      });
-      elements.push({
-        data: { id: `${tid}-${uid}`, source: tid, target: uid, edgeType: 'user-link' },
-      });
-    });
-  }
-
-  return elements;
+function buildStylesheet(): cytoscape.Stylesheet[] {
+  return [
+    // ─── Core ──────────────────────────────────────────────────────
+    {
+      selector: 'node[nodeType="core"]',
+      style: {
+        'background-fill': 'radial-gradient',
+        'background-gradient-stop-colors': '#fed7aa #ea580c',
+        'background-gradient-stop-positions': '0 100',
+        label: 'data(label)',
+        color: '#f8fafc',
+        'font-size': '11px',
+        'font-weight': 800,
+        'text-valign': 'bottom',
+        'text-margin-y': 11,
+        'text-transform': 'uppercase',
+        'letter-spacing': '0.05em',
+        width: 54,
+        height: 54,
+        'border-width': 3.5,
+        'border-color': 'rgba(253, 186, 116, 0.65)',
+        'text-outline-width': 2.5,
+        'text-outline-color': '#060a14',
+        'underlay-color': '#fb923c',
+        'underlay-opacity': 0.3,
+        'underlay-padding': 15,
+        'underlay-shape': 'ellipse',
+        'z-index': 50,
+      } as NodeCss,
+    },
+    // ─── Tower (base — overridden per-tick by .heatmap-*) ─────────
+    {
+      selector: 'node[nodeType="tower"]',
+      style: {
+        'background-fill': 'radial-gradient',
+        'background-gradient-stop-colors': '#93c5fd #3b82f6',
+        'background-gradient-stop-positions': '0 100',
+        label: 'data(label)',
+        color: '#f1f5f9',
+        'font-size': '9px',
+        'font-weight': 600,
+        'text-valign': 'bottom',
+        'text-margin-y': 'data(labelOffset)',
+        width: 36,
+        height: 36,
+        'border-width': 2,
+        'border-color': 'rgba(59, 130, 246, 0.45)',
+        'text-outline-width': 2,
+        'text-outline-color': '#060a14',
+        'underlay-color': '#3b82f6',
+        'underlay-opacity': 0.12,
+        'underlay-padding': 6,
+        'underlay-shape': 'ellipse',
+      } as NodeCss,
+    },
+    // ─── Edge server ────────────────────────────────────────────────
+    {
+      selector: 'node[nodeType="edge"]',
+      style: {
+        'background-fill': 'radial-gradient',
+        'background-gradient-stop-colors': '#6ee7b7 #34d399',
+        'background-gradient-stop-positions': '0 100',
+        label: 'data(label)',
+        color: '#f1f5f9',
+        'font-size': '9px',
+        'font-weight': 600,
+        'text-valign': 'bottom',
+        'text-margin-y': 6,
+        width: 28,
+        height: 28,
+        'border-width': 2,
+        'border-color': 'rgba(52, 211, 153, 0.45)',
+        'text-outline-width': 2,
+        'text-outline-color': '#060a14',
+        shape: 'diamond' as const,
+        'underlay-color': '#34d399',
+        'underlay-opacity': 0.1,
+        'underlay-padding': 5,
+        'underlay-shape': 'ellipse',
+      } as NodeCss,
+    },
+    // ─── Critical infra (Hospital) ─────────────────────────────────
+    {
+      selector: 'node[nodeType="critical"]',
+      style: {
+        'background-fill': 'radial-gradient',
+        'background-gradient-stop-colors': '#fca5a5 #ef4444',
+        'background-gradient-stop-positions': '0 100',
+        label: 'data(label)',
+        color: '#f8fafc',
+        'font-size': '10px',
+        'font-weight': 700,
+        'text-valign': 'bottom',
+        'text-margin-y': 7,
+        width: 36,
+        height: 36,
+        'border-width': 2.5,
+        'border-color': 'rgba(248, 113, 113, 0.55)',
+        'text-outline-width': 2,
+        'text-outline-color': '#060a14',
+        shape: 'star' as const,
+        'underlay-color': '#f87171',
+        'underlay-opacity': 0.22,
+        'underlay-padding': 9,
+        'underlay-shape': 'ellipse',
+      } as NodeCss,
+    },
+    // ─── User cluster ───────────────────────────────────────────────
+    {
+      selector: 'node[nodeType="user"]',
+      style: {
+        'background-color': '#64748b',
+        label: 'data(label)',
+        color: '#94a3b8',
+        'font-size': '8px',
+        'text-valign': 'bottom',
+        'text-margin-y': 'data(labelOffset)',
+        width: 18,
+        height: 18,
+        'border-width': 1,
+        'border-color': 'rgba(100, 116, 139, 0.3)',
+        'text-outline-width': 1,
+        'text-outline-color': '#060a14',
+        opacity: 0.65,
+      } as NodeCss,
+    },
+    // ─── Heatmap overrides (tower utilization, gradient-aware) ────
+    {
+      selector: '.heatmap-green',
+      style: {
+        'background-gradient-stop-colors': '#6ee7b7 #34d399',
+        'border-color': 'rgba(52, 211, 153, 0.55)',
+        'underlay-color': '#34d399',
+        'underlay-opacity': 0.16,
+      } as NodeCss,
+    },
+    {
+      selector: '.heatmap-yellow',
+      style: {
+        'background-gradient-stop-colors': '#fde68a #fbbf24',
+        'border-color': 'rgba(251, 191, 36, 0.55)',
+        'underlay-color': '#fbbf24',
+        'underlay-opacity': 0.18,
+      } as NodeCss,
+    },
+    {
+      selector: '.heatmap-red',
+      style: {
+        'background-gradient-stop-colors': '#fca5a5 #f87171',
+        'border-color': 'rgba(248, 113, 113, 0.55)',
+        'underlay-color': '#f87171',
+        'underlay-opacity': 0.2,
+      } as NodeCss,
+    },
+    {
+      selector: '.failure',
+      style: {
+        'background-fill': 'radial-gradient',
+        'background-gradient-stop-colors': '#fca5a5 #dc2626',
+        'border-color': '#fca5a5',
+        'border-width': 4,
+        'underlay-color': '#ef4444',
+        'underlay-opacity': 0.45,
+        'underlay-padding': 16,
+        'z-index': 60,
+      } as NodeCss,
+    },
+    // ─── Selection / hover ──────────────────────────────────────────
+    {
+      selector: 'node:selected',
+      style: {
+        'border-width': 4,
+        'border-color': '#22d3ee',
+        'overlay-opacity': 0,
+        'underlay-color': '#22d3ee',
+        'underlay-opacity': 0.28,
+        'underlay-padding': 11,
+        'z-index': 999,
+      } as NodeCss,
+    },
+    { selector: 'node.hovered', style: { 'border-width': 3, 'z-index': 998 } as NodeCss },
+    { selector: 'edge.hovered', style: { 'z-index': 998, 'line-opacity': 1 } as EdgeCss },
+    { selector: '.dimmed', style: { opacity: 0.18 } },
+    // ─── Edges (base) ────────────────────────────────────────────────
+    {
+      selector: 'edge',
+      style: {
+        width: 1.2,
+        'line-color': 'rgba(148, 163, 184, 0.14)',
+        'curve-style': 'bezier' as const,
+        'line-style': 'solid' as const,
+      },
+    },
+    {
+      selector: 'edge[edgeType="backbone"]',
+      style: { width: 2, 'line-color': 'rgba(251, 146, 60, 0.28)' },
+    },
+    {
+      selector: 'edge[edgeType="critical-link"]',
+      style: { width: 1.75, 'line-color': 'rgba(248, 113, 113, 0.25)', 'line-style': 'dashed' as const },
+    },
+    {
+      selector: 'edge[edgeType="user-link"]',
+      style: { width: 0.8, 'line-color': 'rgba(100, 116, 139, 0.12)' },
+    },
+    // ─── Link status (applied per-tick to backbone/edge-link/critical-link) ─
+    {
+      selector: '.link-healthy',
+      style: {
+        'line-color': EDGE_STATUS_META.healthy.color,
+        opacity: 0.45,
+        'line-style': 'dashed' as const,
+        'line-dash-pattern': [7, 5],
+      } as EdgeCss,
+    },
+    {
+      selector: '.link-high-traffic',
+      style: {
+        'line-color': EDGE_STATUS_META['high-traffic'].color,
+        opacity: 0.55,
+        'line-style': 'dashed' as const,
+        'line-dash-pattern': [7, 4],
+      } as EdgeCss,
+    },
+    {
+      selector: '.link-warning',
+      style: {
+        'line-color': EDGE_STATUS_META.warning.color,
+        opacity: 0.65,
+        'line-style': 'dashed' as const,
+        'line-dash-pattern': [3, 3],
+      } as EdgeCss,
+    },
+    {
+      selector: '.link-critical',
+      style: {
+        'line-color': EDGE_STATUS_META.critical.color,
+        opacity: 0.85,
+        'line-style': 'dashed' as const,
+        'line-dash-pattern': [8, 4],
+      } as EdgeCss,
+    },
+    { selector: '.failure-edge', style: { 'line-color': '#f87171', width: 3 } },
+  ];
 }
 
 const NetworkTopology: React.FC = () => {
   const cyRef = useRef<Core | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { state, setSelectedNode, filters } = useSimulation();
+  const { state, selectedNode, setSelectedNode, filters } = useSimulation();
 
   // Initialize Cytoscape
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const topologyFilters: TopologyFilters = {
+      towers: filters.towers,
+      users: filters.users,
+      edges: filters.edges,
+      critical: filters.critical,
+    };
+
     const cy = cytoscape({
       container: containerRef.current,
-      elements: buildElements(filters),
-      style: [
-        {
-          selector: 'node[nodeType="core"]',
-          style: {
-            'background-color': '#fb923c',
-            label: 'data(label)',
-            color: '#f1f5f9',
-            'font-size': '10px',
-            'text-valign': 'bottom',
-            'text-margin-y': 8,
-            width: 45,
-            height: 45,
-            'border-width': 3,
-            'border-color': 'rgba(251, 146, 60, 0.5)',
-            'text-outline-width': 2,
-            'text-outline-color': '#060a14',
-            'font-weight': 'bold' as const,
-          },
-        },
-        {
-          selector: 'node[nodeType="tower"]',
-          style: {
-            'background-color': '#3b82f6',
-            label: 'data(label)',
-            color: '#f1f5f9',
-            'font-size': '9px',
-            'text-valign': 'bottom',
-            'text-margin-y': 6,
-            width: 35,
-            height: 35,
-            'border-width': 2,
-            'border-color': 'rgba(59, 130, 246, 0.4)',
-            'text-outline-width': 2,
-            'text-outline-color': '#060a14',
-          },
-        },
-        {
-          selector: 'node[nodeType="edge"]',
-          style: {
-            'background-color': '#34d399',
-            label: 'data(label)',
-            color: '#f1f5f9',
-            'font-size': '9px',
-            'text-valign': 'bottom',
-            'text-margin-y': 6,
-            width: 30,
-            height: 30,
-            'border-width': 2,
-            'border-color': 'rgba(52, 211, 153, 0.4)',
-            'text-outline-width': 2,
-            'text-outline-color': '#060a14',
-            shape: 'diamond' as const,
-          },
-        },
-        {
-          selector: 'node[nodeType="critical"]',
-          style: {
-            'background-color': '#f87171',
-            label: 'data(label)',
-            color: '#f1f5f9',
-            'font-size': '9px',
-            'text-valign': 'bottom',
-            'text-margin-y': 6,
-            width: 35,
-            height: 35,
-            'border-width': 2,
-            'border-color': 'rgba(248, 113, 113, 0.4)',
-            'text-outline-width': 2,
-            'text-outline-color': '#060a14',
-            shape: 'star' as const,
-          },
-        },
-        {
-          selector: 'node[nodeType="user"]',
-          style: {
-            'background-color': '#64748b',
-            label: 'data(label)',
-            color: '#94a3b8',
-            'font-size': '8px',
-            'text-valign': 'bottom',
-            'text-margin-y': 5,
-            width: 20,
-            height: 20,
-            'border-width': 1,
-            'border-color': 'rgba(100, 116, 139, 0.3)',
-            'text-outline-width': 1,
-            'text-outline-color': '#060a14',
-            opacity: 0.7,
-          },
-        },
-        {
-          selector: 'edge',
-          style: {
-            width: 1.5,
-            'line-color': 'rgba(148, 163, 184, 0.15)',
-            'curve-style': 'bezier' as const,
-            'line-style': 'solid' as const,
-          },
-        },
-        {
-          selector: 'edge[edgeType="backbone"]',
-          style: {
-            width: 2.5,
-            'line-color': 'rgba(251, 146, 60, 0.25)',
-            'line-style': 'solid' as const,
-          },
-        },
-        {
-          selector: 'edge[edgeType="critical-link"]',
-          style: {
-            width: 2,
-            'line-color': 'rgba(248, 113, 113, 0.2)',
-            'line-style': 'dashed' as const,
-          },
-        },
-        {
-          selector: 'node:selected',
-          style: {
-            'border-width': 4,
-            'border-color': '#22d3ee',
-            'overlay-opacity': 0,
-          },
-        },
-        {
-          selector: '.failure',
-          style: {
-            'background-color': '#ef4444',
-            'border-color': '#f87171',
-            'border-width': 4,
-          },
-        },
-        {
-          selector: '.failure-edge',
-          style: {
-            'line-color': 'rgba(248, 113, 113, 0.6)',
-            width: 3,
-          },
-        },
-        {
-          selector: '.heatmap-green',
-          style: { 'background-color': '#34d399', 'border-color': 'rgba(52, 211, 153, 0.5)' },
-        },
-        {
-          selector: '.heatmap-yellow',
-          style: { 'background-color': '#fbbf24', 'border-color': 'rgba(251, 191, 36, 0.5)' },
-        },
-        {
-          selector: '.heatmap-red',
-          style: { 'background-color': '#f87171', 'border-color': 'rgba(248, 113, 113, 0.5)' },
-        },
-      ],
+      elements: buildElements(topologyFilters),
+      style: buildStylesheet(),
       layout: { name: 'preset' },
       userZoomingEnabled: true,
       userPanningEnabled: true,
       boxSelectionEnabled: false,
+      wheelSensitivity: 0.3,
       minZoom: 0.3,
       maxZoom: 3,
     });
 
-    // Node click handler
     cy.on('tap', 'node', (evt: EventObject) => {
       const nodeId = evt.target.id();
       const nodeType = evt.target.data('nodeType');
       setSelectedNode({ id: nodeId, type: nodeType });
     });
 
-    // Background click to deselect
     cy.on('tap', (evt: EventObject) => {
       if (evt.target === cy) {
         setSelectedNode(null);
       }
     });
 
-    cy.fit(undefined, 40);
+    cy.on('mouseover', 'node', (evt: EventObject) => {
+      const neighborhood = evt.target.closedNeighborhood();
+      cy.elements().not(neighborhood).addClass('dimmed');
+      neighborhood.addClass('hovered');
+    });
+    cy.on('mouseout', 'node', () => {
+      cy.elements().removeClass('dimmed hovered');
+    });
+
+    cy.fit(undefined, 60);
     cyRef.current = cy;
 
+    // Shared animation loop: dash-offset "flow" on active links + pulse glow on failed nodes.
+    let rafId: number | null = null;
+    if (!prefersReducedMotion()) {
+      let frame = 0;
+      const step = () => {
+        frame += 1;
+        const pulse = 0.55 + Math.sin(frame * 0.06) * 0.25;
+        cy.batch(() => {
+          cy.edges('.link-healthy').style('line-dash-offset', -(frame * 0.15));
+          cy.edges('.link-high-traffic').style('line-dash-offset', -(frame * 0.35));
+          cy.edges('.link-critical').style('line-dash-offset', -(frame * 0.9));
+          cy.nodes('.failure').style('underlay-opacity', pulse * 0.55);
+          cy.nodes('.failure').style('underlay-padding', 12 + pulse * 10);
+        });
+        rafId = requestAnimationFrame(step);
+      };
+      rafId = requestAnimationFrame(step);
+    }
+
     return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
       cy.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.towers, filters.users, filters.edges, filters.critical]);
 
-  // Update heatmap & failures on tick change
+  // Update heatmap, failure state & link-status classes on tick change
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
 
-    // Update tower heatmap colors
-    state.towerData.forEach((tower, towerId) => {
-      const node = cy.getElementById(towerId);
-      if (node.length === 0) return;
-
-      // Remove old heatmap classes
-      node.removeClass('heatmap-green heatmap-yellow heatmap-red failure');
-
-      // Calculate utilization (inverse of bandwidth — higher users = higher util)
-      const utilization = Math.min(100, Math.max(0, 100 - tower.available_bandwidth_mbps));
-
-      if (utilization < 40) {
-        node.addClass('heatmap-green');
-      } else if (utilization < 70) {
-        node.addClass('heatmap-yellow');
-      } else {
-        node.addClass('heatmap-red');
-      }
-    });
-
-    // Update failure states
-    if (filters.failures) {
-      state.failureData.forEach((failure, towerId) => {
+    cy.batch(() => {
+      state.towerData.forEach((tower, towerId) => {
         const node = cy.getElementById(towerId);
         if (node.length === 0) return;
 
-        if (failure.failed === 1) {
-          node.removeClass('heatmap-green heatmap-yellow heatmap-red');
+        node.removeClass('heatmap-green heatmap-yellow heatmap-red failure');
+
+        const utilization = Math.min(100, Math.max(0, 100 - tower.available_bandwidth_mbps));
+        const failure = state.failureData.get(towerId);
+        const failed = !!(filters.failures && failure?.failed === 1);
+
+        if (failed) {
           node.addClass('failure');
-          // Highlight connected edges
-          node.connectedEdges().addClass('failure-edge');
+        } else if (utilization < 40) {
+          node.addClass('heatmap-green');
+        } else if (utilization < 70) {
+          node.addClass('heatmap-yellow');
         } else {
-          node.removeClass('failure');
-          node.connectedEdges().removeClass('failure-edge');
+          node.addClass('heatmap-red');
         }
+
+        const status: EdgeStatus = getLinkStatus(utilization, failed);
+        const connectedLinks = node.connectedEdges().filter((e) => LINK_TYPES.has(e.data('edgeType')));
+        connectedLinks.removeClass(LINK_CLASSES).removeClass('failure-edge');
+        connectedLinks.addClass(`link-${status}`);
+        connectedLinks.forEach((edge) => {
+          const multiplier = EDGE_WIDTH_MULTIPLIER[edge.data('edgeType') as string] ?? 1;
+          edge.style('width', EDGE_STATUS_META[status].width * multiplier);
+          if (status === 'critical') edge.addClass('failure-edge');
+        });
       });
-    }
+    });
   }, [state.towerData, state.failureData, filters.failures]);
+
+  // Keep the graph's visual selection in sync with selectedNode (covers selection changes
+  // that don't originate from a canvas tap, e.g. the "Connected Nodes" chips in NodeDetailPanel).
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.elements(':selected').unselect();
+    if (selectedNode) {
+      cy.getElementById(selectedNode.id).select();
+    }
+  }, [selectedNode]);
 
   // Public method to zoom to a node (called from search)
   const zoomToNode = useCallback((nodeId: string) => {
@@ -332,7 +398,7 @@ const NetworkTopology: React.FC = () => {
       cy.animate({
         center: { eles: node },
         zoom: 2,
-      }, { duration: 500 });
+      }, { duration: 550, easing: 'ease-out-cubic' });
       node.select();
       setSelectedNode({ id: nodeId, type: node.data('nodeType') });
     }
@@ -347,34 +413,44 @@ const NetworkTopology: React.FC = () => {
   return (
     <div className="glass-card-static h-full relative overflow-hidden">
       <div
-        className="absolute top-3 left-4 z-10 flex items-center gap-2"
-        style={{ pointerEvents: 'none' }}
+        className="absolute top-3 left-4 z-10 flex items-center gap-2 px-2.5 py-1 rounded-md"
+        style={{ pointerEvents: 'none', background: 'rgba(6, 10, 20, 0.55)', backdropFilter: 'blur(6px)' }}
       >
-        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+        <span className="label-caps" style={{ letterSpacing: '0.08em' }}>
           Network Topology
         </span>
       </div>
       <div ref={containerRef} className="cytoscape-container" />
       {/* Legend */}
       <div
-        className="absolute bottom-3 left-4 flex items-center gap-4"
-        style={{ fontSize: '10px', color: 'var(--text-muted)' }}
+        className="absolute bottom-3 left-4 flex flex-col gap-1.5 px-2.5 py-2 rounded-md"
+        style={{ fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)', background: 'rgba(6, 10, 20, 0.6)', backdropFilter: 'blur(6px)' }}
       >
-        <span className="flex items-center gap-1">
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fb923c', display: 'inline-block' }} /> Core
-        </span>
-        <span className="flex items-center gap-1">
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} /> Tower
-        </span>
-        <span className="flex items-center gap-1">
-          <span style={{ width: 8, height: 8, borderRadius: '2px', background: '#34d399', display: 'inline-block', transform: 'rotate(45deg)' }} /> Edge
-        </span>
-        <span className="flex items-center gap-1">
-          <span style={{ width: 8, height: 8, background: '#f87171', display: 'inline-block', clipPath: 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)' }} /> Critical
-        </span>
-        <span className="flex items-center gap-1">
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#64748b', display: 'inline-block' }} /> Users
-        </span>
+        <div className="flex items-center gap-4">
+          <span className="flex items-center gap-1.5">
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fb923c', display: 'inline-block', boxShadow: '0 0 6px rgba(251, 146, 60, 0.6)' }} /> Core
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', display: 'inline-block', boxShadow: '0 0 6px rgba(59, 130, 246, 0.6)' }} /> Tower
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span style={{ width: 8, height: 8, borderRadius: '2px', background: '#34d399', display: 'inline-block', transform: 'rotate(45deg)', boxShadow: '0 0 6px rgba(52, 211, 153, 0.6)' }} /> Edge
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span style={{ width: 8, height: 8, background: '#f87171', display: 'inline-block', clipPath: 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)', filter: 'drop-shadow(0 0 4px rgba(248, 113, 113, 0.6))' }} /> Critical
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#64748b', display: 'inline-block' }} /> Users
+          </span>
+        </div>
+        <div className="flex items-center gap-4" style={{ paddingTop: '4px', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>
+          {(['healthy', 'high-traffic', 'warning', 'critical'] as const).map((k) => (
+            <span key={k} className="flex items-center gap-1.5">
+              <span style={{ width: 12, height: 2, background: EDGE_STATUS_META[k].color, display: 'inline-block', borderRadius: 1 }} />
+              {EDGE_STATUS_META[k].label}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );
