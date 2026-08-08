@@ -310,9 +310,14 @@ const NetworkTopology: React.FC = () => {
     });
 
     cy.on('tap', 'node', (evt: EventObject) => {
-      const nodeId = evt.target.id();
-      const nodeType = evt.target.data('nodeType');
+      const node = evt.target;
+      const nodeId = node.id();
+      const nodeType = node.data('nodeType');
       setSelectedNode({ id: nodeId, type: nodeType });
+      cy.animate({
+        center: { eles: node },
+        zoom: 2,
+      }, { duration: 550, easing: 'ease-out-cubic' });
     });
 
     cy.on('tap', (evt: EventObject) => {
