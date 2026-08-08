@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api import devices, topology, telemetry, alerts, predictions, simulation, network, scenario
+from app.api import devices, topology, telemetry, alerts, predictions, simulation, network, scenario, chat
 
 api_router = APIRouter()
 
@@ -12,3 +12,5 @@ api_router.include_router(alerts.router)
 api_router.include_router(predictions.router)
 api_router.include_router(simulation.router)
 api_router.include_router(scenario.router)
+api_router.include_router(chat.router)
+

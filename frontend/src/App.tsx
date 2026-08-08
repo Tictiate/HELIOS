@@ -123,20 +123,21 @@ const Dashboard: React.FC = () => {
         animate="visible"
       >
         {/* Left column: KPIs -> Network Health -> HELIOS Assistant -> AI Event Log */}
-        <motion.div variants={cellVariants} className="flex flex-col gap-4 min-h-0">
+        <motion.div variants={cellVariants} className="flex flex-col gap-3 min-h-0">
           <div style={{ flexShrink: 0 }}>
             <KPIPanel />
           </div>
-          <div className="glass-card-static flex items-center justify-center" style={{ flexShrink: 0, padding: '10px 0' }}>
+          <div className="glass-card-static flex items-center justify-center" style={{ flexShrink: 0, padding: '2px 4px' }}>
             <HealthGauge />
           </div>
-          <div style={{ flex: '1 1 0%', minHeight: 0 }}>
+          <div style={{ flex: '3 1 0%', minHeight: 0 }}>
             <HeliosAssistantPanel />
           </div>
-          <div style={{ height: 200, flexShrink: 0 }}>
+          <div style={{ height: 175, flexShrink: 0 }}>
             <EventLog />
           </div>
         </motion.div>
+
 
         {/* Center column: Topology -> Simulation Replay */}
         <motion.div variants={cellVariants} className="flex flex-col gap-4 min-h-0">

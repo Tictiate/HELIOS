@@ -1,49 +1,92 @@
 import React, { useEffect, useMemo } from 'react';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import { useSimulation } from '../context/SimulationContext';
+import { FiShield, FiTrendingUp, FiTrendingDown } from 'react-icons/fi';
 
 const HealthGauge: React.FC = () => {
   const { state } = useSimulation();
   const score = state.healthData?.network_health_score ?? 50;
-  const { color, label, glowColor } = useMemo(() => {
-    if (score >= 70) return { color: '#34d399', label: 'Healthy', glowColor: 'rgba(52, 211, 153, 0.4)' };
-    if (score >= 40) return { color: '#fbbf24', label: 'Warning', glowColor: 'rgba(251, 191, 36, 0.4)' };
-    return { color: '#f87171', label: 'Critical', glowColor: 'rgba(248, 113, 113, 0.4)' };
+
+  const { color, label, bgColor, borderColor } = useMemo(() => {
+    if (score >= 70) return {
+      color: '#34d399',
+      label: 'Healthy',
+      bgColor: 'rgba(52, 211, 153, 0.12)',
+      borderColor: 'rgba(52, 211, 153, 0.3)',
+    };
+    if (score >= 40) return {
+      color: '#fbbf24',
+      label: 'Warning',
+      bgColor: 'rgba(251, 191, 36, 0.12)',
+      borderColor: 'rgba(251, 191, 36, 0.3)',
+    };
+    return {
+      color: '#f87171',
+      label: 'Critical',
+      bgColor: 'rgba(248, 113, 113, 0.12)',
+      borderColor: 'rgba(248, 113, 113, 0.3)',
+    };
   }, [score]);
-  const radius = 70;
-  const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference - (score / 100) * circumference;
 
   const baselineScore = state.healthHistory[0]?.network_health_score ?? score;
   const delta = score - baselineScore;
 
   const scoreMotion = useMotionValue(score);
   const scoreDisplay = useTransform(scoreMotion, (latest) => latest.toFixed(0));
+
   useEffect(() => {
     const controls = animate(scoreMotion, score, { duration: 0.7, ease: [0.16, 1, 0.3, 1] });
     return controls.stop;
   }, [score, scoreMotion]);
 
   return (
-    <div className="flex flex-col items-center justify-center py-1">
-      <svg width="128" height="128" viewBox="0 0 180 180" style={{ filter: `drop-shadow(0 0 14px ${glowColor})` }}>
-        <circle cx="90" cy="90" r={radius} fill="none" stroke="rgba(148, 163, 184, 0.08)" strokeWidth="10" />
-        <defs><linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor={color} /><stop offset="100%" stopColor={color} stopOpacity="0.5" />
-        </linearGradient></defs>
-        <circle cx="90" cy="90" r={radius} fill="none" stroke="url(#gaugeGradient)" strokeWidth="10" strokeLinecap="round"
-          strokeDasharray={circumference} strokeDashoffset={dashOffset} transform="rotate(-90 90 90)"
-          style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.5s ease' }} />
-        <motion.text x="90" y="82" textAnchor="middle" fill={color} fontSize="34" fontWeight="700"
-          style={{ transition: 'fill 0.5s ease', fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em' }}>{scoreDisplay}</motion.text>
-        <text x="90" y="105" textAnchor="middle" fill="rgba(148, 163, 184, 0.75)" fontSize="11" fontWeight="600"
-          style={{ fontFamily: 'Inter, sans-serif', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{label}</text>
-      </svg>
-      <span className="label-caps-sm" style={{ marginTop: '2px' }}>Network Health</span>
+    <div className="w-full px-3 py-2 flex items-center justify-between gap-3">
+      {/* Icon & Title */}
+      <div className="flex items-center gap-2 shrink-0">
+        <div
+          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border"
+          style={{ backgroundColor: bgColor, borderColor: borderColor, color: color }}
+        >
+          <FiShield className="w-4 h-4" />
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Network Health</span>
+          <div className="flex items-center gap-1.5">
+            <motion.span
+              className="text-base font-extrabold tracking-tight"
+              style={{ color }}
+            >
+              {scoreDisplay}%
+            </motion.span>
+            <span
+              className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border uppercase tracking-wider"
+              style={{ backgroundColor: bgColor, borderColor: borderColor, color: color }}
+            >
+              {label}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Compact Horizontal Progress Bar */}
+      <div className="flex-1 max-w-[140px] flex flex-col gap-1">
+        <div className="h-2 w-full bg-slate-950/80 border border-slate-800/80 rounded-full overflow-hidden p-0.5 shadow-inner">
+          <motion.div
+            className="h-full rounded-full"
+            style={{ backgroundColor: color }}
+            initial={{ width: 0 }}
+            animate={{ width: `${Math.min(100, Math.max(0, score))}%` }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          />
+        </div>
+      </div>
+
+      {/* Delta trend */}
       {Math.abs(delta) >= 0.1 && (
-        <span style={{ fontSize: '10px', fontWeight: 600, marginTop: '2px', color: delta >= 0 ? '#34d399' : '#f87171' }}>
-          {delta >= 0 ? '+' : ''}{delta.toFixed(1)}% vs last hour
-        </span>
+        <div className="flex items-center gap-1 text-[10px] font-semibold shrink-0" style={{ color: delta >= 0 ? '#34d399' : '#f87171' }}>
+          {delta >= 0 ? <FiTrendingUp className="w-3 h-3" /> : <FiTrendingDown className="w-3 h-3" />}
+          <span>{delta >= 0 ? '+' : ''}{delta.toFixed(1)}%</span>
+        </div>
       )}
     </div>
   );

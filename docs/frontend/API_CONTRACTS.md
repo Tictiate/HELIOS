@@ -28,21 +28,55 @@ This document exists so that, per [AGENTS.md](../../AGENTS.md)'s documentation r
 
 ## Endpoints
 
-**TODO** — no endpoints are defined yet. Candidate resource domains implied by `PROJECT_STATE.md`'s Core Modules (Intent Engine, Network State Intelligence, Prediction Engine, Digital Twin, Decision Engine, Explainable AI) are **not** commitments — they are listed here only as a pointer to where future endpoint groups will likely map, once the backend team defines the actual contract:
-
-| Likely future domain | Corresponding `PROJECT_STATE.md` module | Status |
-|---|---|---|
-| Network state / topology | Network State Intelligence | Not started |
-| Predictions | Prediction Engine | Not started |
-| Digital twin state | Digital Twin | Not started |
-| Intent submission | Intent Engine | Not started |
-| AI reasoning / explanations | Explainable AI | Not started |
-
-No frontend code should assume any of the above will exist in this shape — this table records intent to watch for, not a schema to build against.
+| Endpoint | Method | Payload | Description |
+|---|---|---|---|
+| `/api/chat/intent` | `POST` | `{ message: string }` | Parses natural language operator intent into structured event, goal, priority, and crowd estimation. |
+| `/api/chat/analyze` | `POST` | `{ intent: IntentData }` | Generates Explainable AI (XAI) rationale, problem diagnosis, strategy actions, and predicted metric results. |
+| `/api/simulation/run` | `POST` | `{ strategy_title: string }` | Initiates Digital Twin simulation for the specified AI orchestration strategy. |
 
 ## Request/Response Schemas
 
-**TODO** — no schemas are defined yet. When endpoints are added above, each gets a corresponding TypeScript interface in `src/types/` (per [APP_STRUCTURE.md § 11](./APP_STRUCTURE.md#11-types)) and its shape is documented here alongside the endpoint definition, not invented ahead of the backend's actual response shape.
+### `/api/chat/intent`
+- **Request**: `{ "message": "Optimize network for stadium event" }`
+- **Response**:
+```json
+{
+  "event": "stadium_event",
+  "event_display": "Stadium Event",
+  "goal": "minimize_latency",
+  "goal_display": "Minimize Latency",
+  "priority": "high_bandwidth",
+  "priority_display": "High Bandwidth Slicing",
+  "estimated_users": 50000
+}
+```
+
+### `/api/chat/analyze`
+- **Request**: `{ "intent": { ... } }`
+- **Response**:
+```json
+{
+  "problem": {
+    "title": "Tower T7 & T8 Congestion",
+    "description": "Cell tower T7 and adjacent tower T8 will experience severe spectral crowding.",
+    "prediction_confidence": 96,
+    "affected_users": 28000
+  },
+  "strategy": {
+    "title": "Stadium Event Orchestration",
+    "actions": ["Deploy Stadium Slice", "Offload traffic to Edge E2"]
+  },
+  "results": {
+    "latency_before": 45,
+    "latency_after": 12,
+    "health_before": 62,
+    "health_after": 96,
+    "confidence": 96
+  },
+  "reasoning": "Predictive telemetry indicates a 3.4x spike in uplink video streams..."
+}
+```
+
 
 ## Error Handling
 
