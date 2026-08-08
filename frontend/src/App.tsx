@@ -8,6 +8,7 @@ import KPIPanel from './components/KPIPanel';
 import HealthGauge from './components/HealthGauge';
 import NetworkTopology from './components/NetworkTopology';
 import NodeDetailPanel from './components/NodeDetailPanel';
+import NodeInspector from './components/NodeInspector';
 import EventLog from './components/EventLog';
 import AlertsIncidentsPanel from './components/AlertsIncidentsPanel';
 import EdgeServerPanel from './components/EdgeServerPanel';
@@ -115,14 +116,14 @@ const Dashboard: React.FC = () => {
       </motion.div>
 
       <motion.main
-        className="flex-1 min-h-0 p-4 grid gap-4 relative z-10"
+        className="flex-1 min-h-0 p-5 grid gap-5 relative z-10"
         style={GRID_STYLE}
         variants={gridVariants}
         initial="hidden"
         animate="visible"
       >
         {/* Left column: KPIs -> Network Health -> HELIOS Assistant -> AI Event Log */}
-        <motion.div variants={cellVariants} className="flex flex-col gap-3 min-h-0">
+        <motion.div variants={cellVariants} className="flex flex-col gap-4 min-h-0">
           <div style={{ flexShrink: 0 }}>
             <KPIPanel />
           </div>
@@ -138,7 +139,7 @@ const Dashboard: React.FC = () => {
         </motion.div>
 
         {/* Center column: Topology -> Simulation Replay */}
-        <motion.div variants={cellVariants} className="flex flex-col gap-3 min-h-0">
+        <motion.div variants={cellVariants} className="flex flex-col gap-4 min-h-0">
           <div style={{ flex: '1.3 1 0%', minHeight: 0 }}>
             <NetworkTopology />
           </div>
@@ -148,7 +149,7 @@ const Dashboard: React.FC = () => {
         </motion.div>
 
         {/* Right column: Node Details -> AI Decisions -> Alerts & Incidents -> Edge Compute -> Tower Utilization */}
-        <motion.div variants={cellVariants} className="flex flex-col gap-3 min-h-0">
+        <motion.div variants={cellVariants} className="flex flex-col gap-4 min-h-0">
           <div style={{ flex: '1.3 1 0%', minHeight: 0 }}>
             <NodeDetailPanel />
           </div>
@@ -174,6 +175,7 @@ const App: React.FC = () => {
   return (
     <SimulationProvider>
       <Dashboard />
+      <NodeInspector />
       <ToastContainer />
     </SimulationProvider>
   );

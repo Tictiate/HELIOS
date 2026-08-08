@@ -28,7 +28,7 @@ export function buildElements(filters: TopologyFilters): cytoscape.ElementDefini
       const angle = (Math.PI / (TOWER_IDS.length + 1)) * (i + 1);
       elements.push({
         data: { id, label: id, nodeType: 'tower', labelOffset: i % 2 === 0 ? 7 : 15 },
-        position: { x: 400 + Math.cos(angle) * 280 - 200, y: 50 + Math.sin(angle) * 250 },
+        position: { x: 400 + Math.cos(angle) * 310 - 200, y: 50 + Math.sin(angle) * 275 },
       });
       // Core -> Tower edge
       elements.push({
@@ -43,7 +43,7 @@ export function buildElements(filters: TopologyFilters): cytoscape.ElementDefini
       const angle = (Math.PI / (EDGE_IDS.length + 1)) * (i + 1);
       elements.push({
         data: { id, label: id, nodeType: 'edge' },
-        position: { x: 400 + Math.cos(angle) * 170 - 100, y: 300 + Math.sin(angle) * 85 },
+        position: { x: 400 + Math.cos(angle) * 190 - 100, y: 320 + Math.sin(angle) * 95 },
       });
       // Connect to nearest towers
       const connectedTowers = TOWER_IDS.slice(i * 2, i * 2 + 3);
@@ -61,7 +61,7 @@ export function buildElements(filters: TopologyFilters): cytoscape.ElementDefini
   if (filters.critical) {
     elements.push({
       data: { id: 'Hospital', label: 'Hospital', nodeType: 'critical' },
-      position: { x: 550, y: 350 },
+      position: { x: 580, y: 375 },
     });
     // Connect hospital to some towers
     if (filters.towers) {
@@ -82,7 +82,7 @@ export function buildElements(filters: TopologyFilters): cytoscape.ElementDefini
       const ty = towerEl?.position?.y ?? 200;
       elements.push({
         data: { id: uid, label: `Users ${i + 1}`, nodeType: 'user', labelOffset: i % 2 === 0 ? 5 : 11 },
-        position: { x: tx + (i % 2 === 0 ? 90 : -90), y: ty + 110 },
+        position: { x: tx + (i % 2 === 0 ? 100 : -100), y: ty + 120 },
       });
       elements.push({
         data: { id: `${tid}-${uid}`, source: tid, target: uid, edgeType: 'user-link' },

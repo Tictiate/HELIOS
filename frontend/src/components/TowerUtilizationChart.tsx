@@ -117,7 +117,7 @@ const TowerUtilizationChart: React.FC = () => {
           ...baseOptions.plugins,
           legend: {
             ...baseOptions.plugins.legend,
-            labels: { ...baseOptions.plugins.legend.labels, font: { size: 8, family: 'Inter' }, boxWidth: 6, padding: 4 },
+            labels: { ...baseOptions.plugins.legend.labels, font: { size: 10, family: 'Inter' }, boxWidth: 8, padding: 6 },
           },
         },
       }} />

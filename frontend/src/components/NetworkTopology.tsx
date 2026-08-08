@@ -222,14 +222,14 @@ function buildStylesheet(reducedMotion: boolean): cytoscape.StylesheetJson {
       selector: 'edge',
       style: {
         width: 1.2,
-        'line-color': 'rgba(148, 163, 184, 0.14)',
+        'line-color': 'rgba(148, 163, 184, 0.09)',
         'curve-style': 'bezier' as const,
         'line-style': 'solid' as const,
       },
     },
     {
       selector: 'edge[edgeType="backbone"]',
-      style: { width: 2, 'line-color': 'rgba(251, 146, 60, 0.28)' },
+      style: { width: 1.75, 'line-color': 'rgba(251, 146, 60, 0.2)' },
     },
     {
       selector: 'edge[edgeType="critical-link"]',
@@ -237,14 +237,14 @@ function buildStylesheet(reducedMotion: boolean): cytoscape.StylesheetJson {
     },
     {
       selector: 'edge[edgeType="user-link"]',
-      style: { width: 0.8, 'line-color': 'rgba(100, 116, 139, 0.12)' },
+      style: { width: 0.7, 'line-color': 'rgba(100, 116, 139, 0.07)' },
     },
     // ─── Link status (applied per-tick to backbone/edge-link/critical-link) ─
     {
       selector: '.link-healthy',
       style: {
         'line-color': EDGE_STATUS_META.healthy.color,
-        opacity: 0.45,
+        opacity: 0.3,
         'line-style': 'dashed' as const,
         'line-dash-pattern': [7, 5],
       } as EdgeCss,

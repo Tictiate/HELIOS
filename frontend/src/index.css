@@ -114,7 +114,7 @@ body {
 
 .panel-header {
   display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px;
+  padding: 14px 18px;
   border-bottom: 1px solid var(--glass-border);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent);
 }
@@ -383,6 +383,24 @@ body {
 .connection-pill {
   display: flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 10px;
   font-size: 9px; font-weight: 700; letter-spacing: 0.05em;
+}
+
+/* ─── SlideOver (Node Inspector / View All / Expand Chat overlays) ─ */
+
+.slideover-backdrop {
+  position: fixed; inset: 0; z-index: 1400;
+  background: rgba(4, 7, 15, 0.55);
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+}
+.slideover-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 1401;
+  min-width: 340px; max-width: 92vw;
+  display: flex; flex-direction: column;
+  overflow-x: hidden;
+  background: rgba(10, 15, 28, 0.97);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-left: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-lg);
 }
 
 /* ─── Reduced motion ────────────────────────────────────────────── */
