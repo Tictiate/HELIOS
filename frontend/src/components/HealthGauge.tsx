@@ -32,7 +32,7 @@ const HealthGauge: React.FC = () => {
   const delta = score - baselineScore;
 
   const scoreMotion = useMotionValue(score);
-  const scoreDisplay = useTransform(scoreMotion, (latest) => latest.toFixed(0));
+  const scoreDisplay = useTransform(scoreMotion, (latest) => `${latest.toFixed(0)}%`);
 
   useEffect(() => {
     const controls = animate(scoreMotion, score, { duration: 0.7, ease: [0.16, 1, 0.3, 1] });
@@ -56,7 +56,7 @@ const HealthGauge: React.FC = () => {
               className="text-base font-extrabold tracking-tight"
               style={{ color }}
             >
-              {scoreDisplay}%
+              {scoreDisplay}
             </motion.span>
             <span
               className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border uppercase tracking-wider"
