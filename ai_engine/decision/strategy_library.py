@@ -263,6 +263,21 @@ _TEMPLATES: Dict[str, Dict[str, Any]] = {
     },
 
     # ── Network Slice Management ──────────────────────────────────────────
+    "Dynamic Slice Reallocation": {
+        "name": "Dynamic Slice Reallocation",
+        "category": "Network Slice Management",
+        "description": "Dynamically reallocate bandwidth from lower-priority slices to higher-priority slices experiencing SLA violations.",
+        "expected_effect": {
+            "bandwidth": "Optimised across slices",
+            "latency": "Lower for priority slices",
+            "qos": "Guaranteed for critical slices",
+        },
+        "prerequisites": ["slice_orchestrator_available", "sla_violation_detected"],
+        "possible_risks": ["Slight degradation in lower priority slices"],
+        "estimated_execution_time": "10 seconds",
+        "priority": "HIGH",
+    },
+
     "Slice Reconfiguration": {
         "name": "Slice Reconfiguration",
         "category": "Network Slice Management",

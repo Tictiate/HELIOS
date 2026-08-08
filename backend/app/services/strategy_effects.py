@@ -101,6 +101,19 @@ STRATEGY_EFFECTS: Dict[str, Dict[str, float]] = {
         "edge_cpu_factor":         -0.05,
         "edge_memory_factor":      -0.03,
     },
+
+    # ── Network Slice Management ──────────────────────────────────────────
+    "Dynamic Slice Reallocation": {
+        "users_factor":             0.0,
+        "bandwidth_delta":          0.0,
+        "latency_factor":          -0.25,
+        "packet_loss_factor":      -0.20,
+        "tower_utilization_factor": -0.05,
+        "power_delta":              2.0,
+        "temperature_delta":        1.0,
+        "edge_cpu_factor":          0.0,
+        "edge_memory_factor":       0.0,
+    },
 }
 
 # Fallback for unknown strategy names

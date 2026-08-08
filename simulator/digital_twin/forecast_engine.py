@@ -82,6 +82,16 @@ STRATEGY_EFFECTS: Dict[str, Dict[str, float]] = {
     },
 
     # ── Network Slice Management ──────────────────────────────────────────
+    "Dynamic Slice Reallocation": {
+        "bandwidth_delta": 0.0, # Total BW doesn't change, just shifts between slices
+        "latency_factor": -0.25, # Overall latency improves
+        "power_delta": 2.0,
+        "utilization_factor": -0.05,
+        "packet_loss_factor": -0.20,
+        "user_factor": 0.0,
+        "edge_cpu_factor": 0.0,
+    },
+
     "Temporary Network Slice": {
         "bandwidth_delta": 20.0,
         "latency_factor": -0.18,

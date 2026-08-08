@@ -12,7 +12,7 @@ import {
 } from '../services/adapters/aiLoopAdapter';
 import type { AiDecisionItem, PredictionSummary, StrategySummary, AlertItem, AssistantInsight } from '../services/adapters/aiLoopAdapter';
 import { TOWER_IDS, EDGE_IDS } from '../utils/topology';
-import type { NetworkWsMessage, NetworkSnapshotResponse } from '../types/backend';
+import type { NetworkWsMessage, NetworkSnapshotResponse, BackendTelemetryState } from '../types/backend';
 import type { WsStatus } from '../services/websocket/websocket';
 import type {
   TowerUtilizationRow,
@@ -49,6 +49,7 @@ interface SimContextValue {
   aiDecisions: AiDecisionItem[];
   prediction: PredictionSummary | null;
   strategies: StrategySummary | null;
+  telemetry: BackendTelemetryState | null;
   alerts: AlertItem[];
   assistantInsight: AssistantInsight | null;
   isReplaying: boolean;
@@ -356,6 +357,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [aiDecisions, setAiDecisions] = useState<AiDecisionItem[]>([]);
   const [prediction, setPrediction] = useState<PredictionSummary | null>(null);
   const [strategies, setStrategies] = useState<StrategySummary | null>(null);
+  const [telemetry, setTelemetry] = useState<BackendTelemetryState | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [assistantInsight, setAssistantInsight] = useState<AssistantInsight | null>(null);
 
@@ -369,6 +371,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!('telemetry' in msg) || !('prediction' in msg)) return; // guard malformed frames
 
     setHasReceivedFirstFrame(true);
+    setTelemetry(msg.telemetry);
     setPrediction(adaptPrediction(msg.prediction));
     const stratSummary = adaptStrategies(msg.strategies);
     setStrategies(stratSummary);
@@ -406,17 +409,14 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const exitReplay = useCallback(() => setIsReplaying(false), []);
 
-  // While replaying, prediction/strategies (embedded directly in each snapshot) track the
-  // scrubbed position via the SAME currentTick the fleet layer already uses — one controller,
-  // one frame. aiDecisions/alerts/assistantInsight have no reliable per-snapshot correlation in
-  // the backend schema (ExecutionHistory/ScenarioHistory aren't keyed by snapshot_id), so they
-  // stay frozen at their last live value during replay rather than being guessed at.
   let effectivePrediction = prediction;
   let effectiveStrategies = strategies;
+  let effectiveTelemetry = telemetry;
   if (isReplaying && replaySnapshots.length > 0) {
     const lastIdx = replaySnapshots.length - 1;
     const snapIdx = lastIdx === 0 ? 0 : Math.min(lastIdx, Math.floor((currentTick / (TOTAL_TICKS - 1)) * lastIdx));
     const snapshot = replaySnapshots[snapIdx];
+    effectiveTelemetry = snapshot.telemetry;
     effectivePrediction = adaptPrediction(snapshot.prediction);
     effectiveStrategies = adaptStrategies(snapshot.strategies);
   }
@@ -427,7 +427,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     <SimulationContext.Provider value={{
       state, controls, events, selectedNode, setSelectedNode, filters, setFilters, isLoading,
       connectionStatus,
-      aiDecisions, prediction: effectivePrediction, strategies: effectiveStrategies, alerts, assistantInsight,
+      aiDecisions, prediction: effectivePrediction, strategies: effectiveStrategies, telemetry: effectiveTelemetry, alerts, assistantInsight,
       isReplaying, isReplayLoading, replaySnapshotCount: replaySnapshots.length, enterReplay, exitReplay,
       dailySeries,
     }}>

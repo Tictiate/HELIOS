@@ -16,6 +16,7 @@ import TowerUtilizationChart from './components/TowerUtilizationChart';
 import AIDecisionsPanel from './components/ai/AIDecisionsPanel';
 import HeliosAssistantPanel from './components/ai/HeliosAssistantPanel';
 import SimulationTimeline from './components/timeline/SimulationTimeline';
+import { NetworkSlicesContainer } from './components/NetworkSlicesContainer';
 import Skeleton from './components/common/Skeleton';
 import { ToastContainer } from './components/common/Toast';
 import './index.css';
@@ -146,6 +147,9 @@ const Dashboard: React.FC = () => {
           </div>
           <div style={{ flex: '1 1 0%', minHeight: 0 }}>
             <SimulationTimeline />
+          </div>
+          <div style={{ flex: '1.2 1 0%', minHeight: 0 }}>
+            <NetworkSlicesContainer />
           </div>
         </motion.div>
 

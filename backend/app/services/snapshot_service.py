@@ -72,6 +72,23 @@ def process_and_store_snapshot(
         changed_metrics=report.get("changed_metrics", {}),
     )
     create_execution(db=db, execution=exec_create)
+    
+    # ── 4.5 Persist Network Slices ───────────────────────────────────────
+    from app.models.network import NetworkSlice
+    slices_data = updated_state.get("slices", [])
+    for slice_data in slices_data:
+        # Check if exists
+        existing = db.query(NetworkSlice).filter(
+            NetworkSlice.slice_id == slice_data["slice_id"]
+        ).first()
+        if existing:
+            for k, v in slice_data.items():
+                setattr(existing, k, v)
+        else:
+            new_slice = NetworkSlice(**slice_data)
+            new_slice.tower_id = updated_state.get("tower_id", "T1")
+            db.add(new_slice)
+    db.commit()
 
     # ── 5. Generate and Persist Explanations ──────────────────────────────
     explanation_result = generate_explanations(

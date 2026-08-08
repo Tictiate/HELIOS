@@ -121,3 +121,31 @@ class NetworkHealthResponse(NetworkHealthBase):
     id: uuid.UUID
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class NetworkSliceBase(BaseModel):
+    slice_id: str
+    tower_id: str
+    name: str
+    slice_type: str
+    priority: str
+    allocated_bandwidth_mbps: float
+    minimum_bandwidth_mbps: float
+    maximum_bandwidth_mbps: float
+    active_users: int
+    current_demand_mbps: float
+    current_latency_ms: float
+    current_packet_loss_pct: float
+    latency_target_ms: float
+    packet_loss_target_pct: float
+    status: str
+
+class NetworkSliceCreate(NetworkSliceBase):
+    pass
+
+class NetworkSliceResponse(NetworkSliceBase):
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)

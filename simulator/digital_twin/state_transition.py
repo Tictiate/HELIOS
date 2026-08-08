@@ -53,6 +53,7 @@ def extract_base_kpis(network_state: Dict[str, Any]) -> Dict[str, float]:
         "active_users": int(network_state.get("users", 500)),
         "edge_cpu": float(network_state.get("cpu_usage_pct", 50)),
         "edge_memory": float(network_state.get("memory_usage_pct", 45)),
+        "slices": copy.deepcopy(network_state.get("slices", []))
     }
 
 
@@ -141,6 +142,38 @@ def apply_tick(
 
     health = calculate_network_health(latency, bandwidth, packet_loss, power, utilization)
 
+    # ── Simulate Slice Evolution ──────────────────────────────────────────
+    from simulator.digital_twin.metrics import _progress
+    slices_sim = []
+    p = _progress(sim_tick, t)
+    for s in base_kpis.get("slices", []):
+        s_clone = copy.deepcopy(s)
+        if strategy_name == "Dynamic Slice Reallocation":
+            # If in violation, latency and PL interpolate down to targets
+            if s_clone["status"] in ["VIOLATION", "DEGRADED"]:
+                lat_diff = s_clone["current_latency_ms"] - (s_clone["latency_target_ms"] * 0.8)
+                pl_diff = s_clone["current_packet_loss_pct"] - (s_clone["packet_loss_target_pct"] * 0.5)
+                s_clone["current_latency_ms"] -= (lat_diff * p)
+                s_clone["current_packet_loss_pct"] -= (pl_diff * p)
+                
+                # Allocation increases
+                demand = s_clone["current_demand_mbps"]
+                alloc_diff = (demand * 1.2) - s_clone["allocated_bandwidth_mbps"]
+                s_clone["allocated_bandwidth_mbps"] += (alloc_diff * p)
+                
+                # Update status at high progress
+                if p > 0.8:
+                    s_clone["status"] = "HEALTHY"
+            
+            # Lower priority slices might give up allocation
+            elif s_clone["priority"] in ["NORMAL", "LOW"] and s_clone["allocated_bandwidth_mbps"] > s_clone["current_demand_mbps"]:
+                surplus = s_clone["allocated_bandwidth_mbps"] - s_clone["current_demand_mbps"]
+                s_clone["allocated_bandwidth_mbps"] -= (surplus * 0.5 * p)
+                # They might slightly degrade but remain healthy
+                s_clone["current_latency_ms"] += (s_clone["latency_target_ms"] * 0.2 * p)
+
+        slices_sim.append(s_clone)
+
     return {
         "tick": tick,
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
@@ -156,4 +189,5 @@ def apply_tick(
         "active_users": active_users,
         "edge_cpu": edge_cpu,
         "edge_memory": edge_memory,
+        "slices": slices_sim,
     }

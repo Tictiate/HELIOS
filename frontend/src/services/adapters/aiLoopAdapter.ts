@@ -54,9 +54,15 @@ function statusFromReport(status: string, improvementScore: number): AiDecisionS
 }
 
 export function adaptExecutionReport(report: ExecutionReport, id?: string): AiDecisionItem {
+  let text = report.strategy === 'None' ? 'No action required — network nominal' : report.strategy;
+  
+  if (report.slice_changes && report.slice_changes.length > 0) {
+    text += ` (+${report.slice_changes.length} slice SLA updates)`;
+  }
+
   return {
     id: id ?? report.execution_id,
-    text: report.strategy === 'None' ? 'No action required — network nominal' : report.strategy,
+    text,
     status: statusFromReport(report.status, report.improvement_score),
     timestamp: report.generated_at,
   };

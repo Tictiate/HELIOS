@@ -202,6 +202,30 @@ class AutonomousExecutor:
             lat, bw, pl, pwr, util,
         )
 
+        # ── Apply Slice Reallocation Logic ────────────────────────────────────
+        if resolved_name == "Dynamic Slice Reallocation":
+            slices = state.get("slices", [])
+            
+            # Record violations before
+            violations_before = [s["name"] for s in slices if s["status"] in ["VIOLATION", "DEGRADED"]]
+            
+            for s in slices:
+                if s["status"] in ["VIOLATION", "DEGRADED"]:
+                    # Increase allocation to meet demand + 20%
+                    demand = s["current_demand_mbps"]
+                    target_alloc = min(demand * 1.2, s["maximum_bandwidth_mbps"])
+                    s["allocated_bandwidth_mbps"] = round(target_alloc, 2)
+                    
+                    # Assume execution fixes it immediately
+                    s["current_latency_ms"] = s["latency_target_ms"] * 0.8
+                    s["current_packet_loss_pct"] = s["packet_loss_target_pct"] * 0.5
+                    s["status"] = "HEALTHY"
+                    
+                elif s["priority"] in ["NORMAL", "LOW"] and s["allocated_bandwidth_mbps"] > s["current_demand_mbps"]:
+                    # Reclaim surplus
+                    surplus = s["allocated_bandwidth_mbps"] - s["current_demand_mbps"]
+                    s["allocated_bandwidth_mbps"] = round(s["allocated_bandwidth_mbps"] - (surplus * 0.5), 2)
+
         return state
 
     # ── 3. Build Execution Report ─────────────────────────────────────────
@@ -236,7 +260,33 @@ class AutonomousExecutor:
                 if b != a:
                     changed[key] = {"before": b, "after": a, "delta": round(a - b, 2)}
 
-        return {
+        # Capture slice changes if present
+        slice_changes = []
+        sla_violations_before = []
+        sla_violations_after = []
+        
+        slices_before = {s["name"]: s for s in state_before.get("slices", [])}
+        slices_after = {s["name"]: s for s in state_after.get("slices", [])}
+        
+        for name, sb in slices_before.items():
+            if sb["status"] in ["VIOLATION", "DEGRADED"]:
+                sla_violations_before.append(name)
+            
+            sa = slices_after.get(name)
+            if sa:
+                if sa["status"] in ["VIOLATION", "DEGRADED"]:
+                    sla_violations_after.append(name)
+                    
+                if sb["allocated_bandwidth_mbps"] != sa["allocated_bandwidth_mbps"]:
+                    slice_changes.append({
+                        "name": name,
+                        "before_mbps": sb["allocated_bandwidth_mbps"],
+                        "after_mbps": sa["allocated_bandwidth_mbps"],
+                        "status_before": sb["status"],
+                        "status_after": sa["status"]
+                    })
+
+        report_dict = {
             "execution_id": str(uuid.uuid4()),
             "strategy": strategy_name,
             "status": status,
@@ -247,6 +297,13 @@ class AutonomousExecutor:
             "improvement_score": improvement,
             "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
         }
+        
+        if slice_changes or sla_violations_before:
+            report_dict["slice_changes"] = slice_changes
+            report_dict["sla_violations_before"] = sla_violations_before
+            report_dict["sla_violations_after"] = sla_violations_after
+            
+        return report_dict
 
     # ── 4. Public API ─────────────────────────────────────────────────────
 

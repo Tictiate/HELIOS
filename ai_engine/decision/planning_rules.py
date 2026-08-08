@@ -63,6 +63,14 @@ def _health(p: Dict[str, Any]) -> float:
     """Extract network health score."""
     return float(p.get("network_health", 100))
 
+def _sla_violated(p: Dict[str, Any]) -> bool:
+    """Check if any network slice is in VIOLATION or DEGRADED status."""
+    slices = p.get("slices", [])
+    for s in slices:
+        if s.get("status") in ["VIOLATION", "DEGRADED"]:
+            return True
+    return False
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Rule definitions
@@ -84,6 +92,19 @@ RULES: List[PlanningRule] = [
             "Traffic Redistribution",
         ],
         priority=10,
+    ),
+
+    # ── SLA Violation ─────────────────────────────────────────────────────
+    PlanningRule(
+        name="slice_sla_violation",
+        condition=lambda p: _sla_violated(p),
+        goal="Restore SLA Targets",
+        strategy_names=[
+            "Dynamic Slice Reallocation",
+            "Traffic Redistribution",
+            "QoS Traffic Shaping",
+        ],
+        priority=18,  # High priority, just below failure
     ),
 
     # ── Severe congestion ─────────────────────────────────────────────────

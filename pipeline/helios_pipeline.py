@@ -105,6 +105,10 @@ class HeliosPipeline:
         context = prediction.copy()
         if "tower_id" not in context:
             context["tower_id"] = current_state.get("tower_id", "Unknown")
+        
+        # Inject slices so the planner rules can inspect SLA violations
+        context["slices"] = current_state.get("slices", [])
+        
         return helios_plan(context)
 
     def run_simulator(

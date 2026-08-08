@@ -83,6 +83,23 @@ export interface NetworkHealthResponse {
 
 // ─── AI decision-loop layer ────────────────────────────────────────────────
 
+export interface NetworkSlice {
+  slice_id: string;
+  name: string;
+  slice_type: string;
+  priority: string;
+  allocated_bandwidth_mbps: number;
+  minimum_bandwidth_mbps: number;
+  maximum_bandwidth_mbps: number;
+  active_users: number;
+  current_demand_mbps: number;
+  current_latency_ms: number;
+  current_packet_loss_pct: number;
+  latency_target_ms: number;
+  packet_loss_target_pct: number;
+  status: string;
+}
+
 /**
  * The single synthetic entity's telemetry (`backend/app/simulator/live_simulator.py`
  * `generate_mock_telemetry()`, evolved by `autonomous_executor.apply_strategy`). Some fields
@@ -102,6 +119,7 @@ export interface BackendTelemetryState {
   network_health?: number;
   tower_utilization_pct?: number;
   memory_usage_pct?: number;
+  slices?: NetworkSlice[];
 }
 
 /** `ai_engine/prediction/predict.py` `HELIOSAI.predict()` return shape. */
@@ -160,6 +178,14 @@ export interface SimulationOutput {
   }>;
 }
 
+export interface SliceChange {
+  name: string;
+  before_mbps: number;
+  after_mbps: number;
+  status_before: string;
+  status_after: string;
+}
+
 /** `backend/app/services/autonomous_executor.py` `_build_report()` return shape. */
 export interface ExecutionReport {
   execution_id: string;
@@ -171,6 +197,9 @@ export interface ExecutionReport {
   network_health_after: number;
   improvement_score: number;
   generated_at: string;
+  slice_changes?: SliceChange[];
+  sla_violations_before?: string[];
+  sla_violations_after?: string[];
 }
 
 /** `backend/app/services/explainability_service.py` `generate_full_explanation()` return shape. */

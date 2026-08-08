@@ -60,6 +60,18 @@ def get_tower_failures(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tower not found")
     return network_crud.get_tower_failures(db, tower_id=tower_id, skip=skip, limit=limit)
 
+from app.schemas.network import NetworkSliceResponse
+@router.get("/towers/{tower_id}/slices", response_model=List[NetworkSliceResponse])
+def get_tower_slices(
+    tower_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    db: Session = Depends(get_db)
+):
+    if not network_crud.get_tower_by_id(db, tower_id=tower_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tower not found")
+    return network_crud.get_network_slices(db, tower_id=tower_id, skip=skip, limit=limit)
+
 @router.get("/edges", response_model=List[EdgeServerResponse])
 def get_edges(
     skip: int = Query(0, ge=0),

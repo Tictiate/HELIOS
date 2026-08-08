@@ -108,3 +108,34 @@ class NetworkHealth(Base):
     resource_utilization_pct: Mapped[float] = mapped_column(Float, nullable=False)
     overall_health_index: Mapped[float] = mapped_column(Float, nullable=False)
     health_category: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class NetworkSlice(Base):
+    __tablename__ = "network_slices"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    slice_id: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
+    tower_id: Mapped[str] = mapped_column(String, ForeignKey("towers.tower_id"), nullable=False, index=True)
+    
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    slice_type: Mapped[str] = mapped_column(String, nullable=False)
+    priority: Mapped[str] = mapped_column(String, nullable=False)
+    
+    allocated_bandwidth_mbps: Mapped[float] = mapped_column(Float, nullable=False)
+    minimum_bandwidth_mbps: Mapped[float] = mapped_column(Float, nullable=False)
+    maximum_bandwidth_mbps: Mapped[float] = mapped_column(Float, nullable=False)
+    
+    active_users: Mapped[int] = mapped_column(Integer, nullable=False)
+    current_demand_mbps: Mapped[float] = mapped_column(Float, nullable=False)
+    current_latency_ms: Mapped[float] = mapped_column(Float, nullable=False)
+    current_packet_loss_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    
+    latency_target_ms: Mapped[float] = mapped_column(Float, nullable=False)
+    packet_loss_target_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    tower = relationship("Tower")

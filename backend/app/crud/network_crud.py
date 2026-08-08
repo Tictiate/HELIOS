@@ -3,7 +3,7 @@ from typing import List, Optional
 import uuid
 
 from app.models.network import (
-    Tower, EdgeServer, TowerUtilization, Traffic, Failure, EdgeTelemetry, NetworkHealth
+    Tower, EdgeServer, TowerUtilization, Traffic, Failure, EdgeTelemetry, NetworkHealth, NetworkSlice
 )
 
 def get_towers(db: Session, skip: int = 0, limit: int = 100) -> List[Tower]:
@@ -36,3 +36,7 @@ def get_edge_telemetry(db: Session, edge_id: str, skip: int = 0, limit: int = 10
 
 def get_network_health(db: Session, skip: int = 0, limit: int = 100) -> List[NetworkHealth]:
     return db.query(NetworkHealth).order_by(NetworkHealth.timestamp.desc()).offset(skip).limit(limit).all()
+
+def get_network_slices(db: Session, tower_id: str, skip: int = 0, limit: int = 100) -> List[NetworkSlice]:
+    return db.query(NetworkSlice).filter(NetworkSlice.tower_id == tower_id)\
+             .order_by(NetworkSlice.updated_at.desc()).offset(skip).limit(limit).all()
