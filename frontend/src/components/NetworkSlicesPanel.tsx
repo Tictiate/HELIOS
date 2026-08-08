@@ -1,97 +1,95 @@
 import React from 'react';
+import { FiShieldOff, FiAlertTriangle, FiCheckCircle } from 'react-icons/fi';
 import type { NetworkSlice } from '../types/backend';
-import { ShieldCheck, ShieldAlert, AlertTriangle } from 'lucide-react';
 
 interface NetworkSlicesPanelProps {
   slices: NetworkSlice[];
 }
 
+const STATUS_META: Record<string, { label: string; color: string; icon: typeof FiCheckCircle }> = {
+  VIOLATION: { label: 'Violation', color: 'var(--accent-red)', icon: FiShieldOff },
+  DEGRADED: { label: 'Degraded', color: 'var(--accent-yellow)', icon: FiAlertTriangle },
+  HEALTHY: { label: 'Healthy', color: 'var(--accent-green)', icon: FiCheckCircle },
+};
+
+const PRIORITY_COLOR: Record<string, string> = {
+  CRITICAL: 'var(--accent-red)',
+  HIGH: 'var(--accent-orange)',
+  MEDIUM: 'var(--text-secondary)',
+  NORMAL: 'var(--text-muted)',
+};
+
+function formatMs(ms: number): string {
+  if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
+  return `${ms.toFixed(1)}`;
+}
+
 export const NetworkSlicesPanel: React.FC<NetworkSlicesPanelProps> = ({ slices }) => {
   if (!slices || slices.length === 0) {
     return (
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-        <h2 className="text-lg font-bold text-gray-100 mb-4">Network Slices</h2>
-        <div className="text-gray-500 italic">No slice telemetry available.</div>
+      <div className="flex items-center justify-center" style={{ padding: '24px 0', color: 'var(--text-muted)', fontSize: '11px' }}>
+        No slice telemetry available.
       </div>
     );
   }
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 flex flex-col">
-      <h2 className="text-lg font-bold text-gray-100 mb-4">Active Network Slices</h2>
-      
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-gray-800 text-xs text-gray-500 uppercase tracking-wider">
-              <th className="py-2 px-3 font-semibold">Slice</th>
-              <th className="py-2 px-3 font-semibold text-center">Priority</th>
-              <th className="py-2 px-3 font-semibold text-right">Allocated (Mbps)</th>
-              <th className="py-2 px-3 font-semibold text-right">Demand (Mbps)</th>
-              <th className="py-2 px-3 font-semibold text-right">Latency (ms)</th>
-              <th className="py-2 px-3 font-semibold text-center">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-800">
-            {slices.map((slice) => {
-              
-              // Status formatting
-              let statusIcon = <ShieldCheck className="w-4 h-4 text-emerald-500" />;
-              let statusText = "HEALTHY";
-              let statusClass = "text-emerald-500 bg-emerald-500/10";
-              
-              if (slice.status === 'VIOLATION') {
-                statusIcon = <ShieldAlert className="w-4 h-4 text-red-500" />;
-                statusText = "VIOLATION";
-                statusClass = "text-red-500 bg-red-500/10 border-red-500/20";
-              } else if (slice.status === 'DEGRADED') {
-                statusIcon = <AlertTriangle className="w-4 h-4 text-amber-500" />;
-                statusText = "DEGRADED";
-                statusClass = "text-amber-500 bg-amber-500/10 border-amber-500/20";
-              }
-
-              // Priority formatting
-              let priorityColor = "text-gray-400";
-              if (slice.priority === "CRITICAL") priorityColor = "text-red-400 font-bold";
-              else if (slice.priority === "HIGH") priorityColor = "text-orange-400 font-semibold";
-              
-              const isOverDemand = slice.current_demand_mbps > slice.allocated_bandwidth_mbps;
-
-              return (
-                <tr key={slice.slice_id} className="hover:bg-gray-800/50 transition-colors">
-                  <td className="py-3 px-3">
-                    <div className="font-medium text-gray-200">{slice.name}</div>
-                    <div className="text-[10px] text-gray-500 uppercase">{slice.slice_type}</div>
-                  </td>
-                  <td className={`py-3 px-3 text-center text-xs ${priorityColor}`}>
-                    {slice.priority}
-                  </td>
-                  <td className="py-3 px-3 text-right">
-                    <span className="text-gray-200 font-mono">{slice.allocated_bandwidth_mbps.toFixed(1)}</span>
-                  </td>
-                  <td className="py-3 px-3 text-right">
-                    <span className={`font-mono ${isOverDemand ? 'text-red-400 font-bold' : 'text-gray-400'}`}>
-                      {slice.current_demand_mbps.toFixed(1)}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-right">
-                    <div className="flex flex-col items-end">
-                      <span className="text-gray-200 font-mono">{slice.current_latency_ms.toFixed(1)}</span>
-                      <span className="text-[10px] text-gray-500">tgt: {slice.latency_target_ms}</span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-3">
-                    <div className={`flex items-center justify-center space-x-1 px-2 py-1 rounded border border-transparent ${statusClass}`}>
-                      {statusIcon}
-                      <span className="text-xs font-bold tracking-wider">{statusText}</span>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ borderBottom: '1px solid var(--glass-border)' }}>
+            {['Slice', 'Priority', 'Allocated', 'Demand', 'Latency', 'Status'].map((h, i) => (
+              <th key={h} className="label-caps-sm" style={{ padding: '8px 10px', textAlign: i >= 2 && i <= 4 ? 'right' : i === 5 ? 'center' : 'left', letterSpacing: '0.04em' }}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {slices.map((slice) => {
+            const meta = STATUS_META[slice.status] ?? STATUS_META.HEALTHY;
+            const StatusIcon = meta.icon;
+            const overDemand = slice.current_demand_mbps > slice.allocated_bandwidth_mbps;
+            return (
+              <tr key={slice.slice_id} style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.06)' }}>
+                <td style={{ padding: '9px 10px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{slice.name}</div>
+                  <div className="label-caps-sm" style={{ letterSpacing: 0, fontSize: '9px', marginTop: 1 }}>{slice.slice_type}</div>
+                </td>
+                <td style={{ padding: '9px 10px', fontSize: '11px', fontWeight: 700, color: PRIORITY_COLOR[slice.priority] ?? 'var(--text-secondary)' }}>
+                  {slice.priority}
+                </td>
+                <td style={{ padding: '9px 10px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+                  {slice.allocated_bandwidth_mbps.toFixed(1)}
+                </td>
+                <td style={{ padding: '9px 10px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: overDemand ? 'var(--accent-red)' : 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                  {slice.current_demand_mbps.toFixed(1)}
+                </td>
+                <td style={{ padding: '9px 10px', textAlign: 'right' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+                    {formatMs(slice.current_latency_ms)}<span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>ms</span>
+                  </div>
+                  <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>tgt {slice.latency_target_ms}ms</div>
+                </td>
+                <td style={{ padding: '9px 10px' }}>
+                  <div
+                    className="flex items-center justify-center gap-1.5"
+                    style={{
+                      padding: '3px 8px', borderRadius: 10, background: `${meta.color}1a`,
+                      border: `1px solid ${meta.color}33`, color: meta.color,
+                    }}
+                  >
+                    <StatusIcon style={{ width: 11, height: 11 }} />
+                    <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{meta.label}</span>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 };
+
+export default NetworkSlicesPanel;

@@ -140,7 +140,7 @@ const Dashboard: React.FC = () => {
         </motion.div>
 
 
-        {/* Center column: Topology -> Simulation Replay */}
+        {/* Center column: Topology -> Simulation Replay -> Network Slices (compact, expandable) */}
         <motion.div variants={cellVariants} className="flex flex-col gap-4 min-h-0">
           <div style={{ flex: '1.3 1 0%', minHeight: 0 }}>
             <NetworkTopology />
@@ -148,7 +148,7 @@ const Dashboard: React.FC = () => {
           <div style={{ flex: '1 1 0%', minHeight: 0 }}>
             <SimulationTimeline />
           </div>
-          <div style={{ flex: '1.2 1 0%', minHeight: 0 }}>
+          <div style={{ flexShrink: 0 }}>
             <NetworkSlicesContainer />
           </div>
         </motion.div>

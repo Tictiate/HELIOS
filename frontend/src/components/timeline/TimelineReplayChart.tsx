@@ -106,7 +106,8 @@ const TimelineReplayChart: React.FC<TimelineReplayChartProps> = ({ points, curre
           onPointerUp={handlePointerUp}
         >
           {latencyTicks.map((t, i) => {
-            const y = PAD_TOP + (HEIGHT - PAD_TOP - PAD_BOTTOM) - (i / (latencyTicks.length - 1)) * (HEIGHT - PAD_TOP - PAD_BOTTOM);
+            const ratio = latencyTicks.length > 1 ? i / (latencyTicks.length - 1) : 0;
+            const y = PAD_TOP + (HEIGHT - PAD_TOP - PAD_BOTTOM) - ratio * (HEIGHT - PAD_TOP - PAD_BOTTOM);
             return <line key={t} x1={0} y1={y} x2={WIDTH} y2={y} stroke="rgba(148, 163, 184, 0.08)" strokeWidth={1} vectorEffect="non-scaling-stroke" />;
           })}
           {latencyPoints.length > 0 && <path d={pathFor(latencyPoints)} fill="none" stroke="#3b82f6" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}

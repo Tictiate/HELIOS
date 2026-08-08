@@ -3,61 +3,76 @@ import type { NetworkSlice } from '../types/backend';
 
 interface BandwidthVisualizationProps {
   slices: NetworkSlice[];
-  totalCapacityMbps?: number;
+  /** Compact renders just the bar (no title/legend) for use in a small summary strip. */
+  compact?: boolean;
 }
 
-export const BandwidthVisualization: React.FC<BandwidthVisualizationProps> = ({ slices, totalCapacityMbps = 100 }) => {
+const SLICE_COLORS: Record<string, string> = {
+  emergency: 'var(--accent-red)',
+  voice: 'var(--accent-blue)',
+  iot: 'var(--accent-purple)',
+  gaming: 'var(--accent-orange)',
+  video: 'var(--accent-cyan)',
+};
+const FALLBACK_COLOR = 'var(--text-muted)';
+
+function colorFor(sliceType: string): string {
+  return SLICE_COLORS[sliceType.toLowerCase()] ?? FALLBACK_COLOR;
+}
+
+export const BandwidthVisualization: React.FC<BandwidthVisualizationProps> = ({ slices, compact = false }) => {
   if (!slices || slices.length === 0) {
-    return <div className="text-gray-400 text-sm italic">No slice data available</div>;
+    return <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>No slice data available</div>;
   }
 
-  // Pre-defined colors for standard slice types
-  const getColor = (sliceType: string) => {
-    switch (sliceType.toLowerCase()) {
-      case 'emergency': return 'bg-red-500';
-      case 'voice': return 'bg-blue-500';
-      case 'iot': return 'bg-purple-500';
-      case 'gaming': return 'bg-orange-500';
-      case 'video': return 'bg-teal-500';
-      default: return 'bg-gray-500';
-    }
-  };
+  const totalCapacityMbps = slices.reduce((sum, s) => sum + s.allocated_bandwidth_mbps, 0) || 1;
+  const barHeight = compact ? 8 : 26;
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Tower Bandwidth Allocation</h3>
-        <span className="text-xs text-gray-400">{totalCapacityMbps} Mbps Total</span>
-      </div>
-      
-      {/* The Bar */}
-      <div className="w-full h-8 flex rounded-md overflow-hidden bg-gray-800 border border-gray-700 shadow-inner">
+    <div className="flex flex-col" style={{ gap: compact ? 0 : 12 }}>
+      {!compact && (
+        <div className="flex items-center justify-between">
+          <span className="label-caps-sm">Tower Bandwidth Allocation</span>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{totalCapacityMbps.toFixed(0)} Mbps total</span>
+        </div>
+      )}
+
+      <div
+        className="flex"
+        style={{
+          width: '100%', height: barHeight, borderRadius: compact ? 5 : 8, overflow: 'hidden',
+          background: 'rgba(148, 163, 184, 0.08)', border: '1px solid rgba(148, 163, 184, 0.12)',
+        }}
+      >
         {slices.map((slice) => {
-          const widthPct = (slice.allocated_bandwidth_mbps / totalCapacityMbps) * 100;
+          const widthPct = Math.min(100, (slice.allocated_bandwidth_mbps / totalCapacityMbps) * 100);
           return (
             <div
               key={slice.slice_id}
-              style={{ width: `${widthPct}%` }}
-              className={`${getColor(slice.slice_type)} h-full transition-all duration-500 ease-in-out border-r border-gray-800 last:border-r-0 relative group`}
-            >
-              {/* Tooltip */}
-              <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 whitespace-nowrap pointer-events-none shadow-lg">
-                <span className="font-bold">{slice.name}</span>: {slice.allocated_bandwidth_mbps} Mbps
-              </div>
-            </div>
+              title={`${slice.name}: ${slice.allocated_bandwidth_mbps.toFixed(1)} Mbps`}
+              style={{
+                width: `${widthPct}%`, height: '100%', background: colorFor(slice.slice_type),
+                borderRight: '1px solid rgba(6, 10, 20, 0.5)', transition: 'width var(--dur-base) ease',
+              }}
+            />
           );
         })}
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-4 pt-2">
-        {slices.map((slice) => (
-          <div key={slice.slice_id} className="flex items-center space-x-2">
-            <div className={`w-3 h-3 rounded-full ${getColor(slice.slice_type)}`}></div>
-            <span className="text-xs text-gray-400 font-medium">{slice.name} <span className="text-gray-500">({slice.allocated_bandwidth_mbps}M)</span></span>
-          </div>
-        ))}
-      </div>
+      {!compact && (
+        <div className="flex flex-wrap items-center" style={{ gap: 12 }}>
+          {slices.map((slice) => (
+            <div key={slice.slice_id} className="flex items-center gap-1.5">
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: colorFor(slice.slice_type), display: 'inline-block' }} />
+              <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                {slice.name} <span style={{ color: 'var(--text-muted)' }}>({slice.allocated_bandwidth_mbps.toFixed(0)}M)</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
+
+export default BandwidthVisualization;
