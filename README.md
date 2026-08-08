@@ -33,7 +33,7 @@ Example:
 
 HELIOS automatically:
 
-- Understands operator intent using an LLM
+- Understands operator intent from natural-language prompts (rule-based today; LLM-backed parsing is on the roadmap)
 - Builds structured network objectives
 - Predicts congestion and failures
 - Simulates multiple optimization strategies in a Digital Twin
@@ -99,36 +99,39 @@ The project demonstrates how future AI-native networks can become self-managing 
 
 ## Frontend
 
-- React
+- React 19 + TypeScript
+- Vite
 - Tailwind CSS
-- Cytoscape.js
+- Framer Motion
+- Cytoscape.js (network topology graph)
 - Chart.js
 
 ## Backend
 
 - FastAPI
 - Python
+- SQLAlchemy + Alembic (migrations)
 
 ## Artificial Intelligence
 
-- Gemini API / OpenAI GPT
-- Scikit-learn
-- XGBoost
+- Scikit-learn (congestion & failure prediction models)
+- Rule-based strategy planner, optimizer, and explainability layer
+- Intent/chat understanding is currently keyword/rule-based, not a live LLM integration (no Gemini/OpenAI call is made yet)
 
 ## Simulation
 
-- NetworkX
+- Custom digital-twin simulator (`simulator/digital_twin/`) driving state transitions, forecasting, and scenario injection
 - Synthetic Telecom Dataset
 
 ## Database
 
-- SQLite
+- PostgreSQL (Neon-hosted in the current deployment; `docker-compose.yaml` provisions a local Postgres 16 container for development)
 
 ## Development
 
 - Git
 - GitHub
-- REST APIs
+- REST APIs + WebSockets
 - Postman
 
 ---
@@ -139,57 +142,58 @@ The project demonstrates how future AI-native networks can become self-managing 
 HELIOS/
 │
 ├── README.md
-├── LICENSE
+├── AGENTS.md
+├── CLAUDE.md
+├── CONTRIBUTING.md
+├── PROJECT_STATE.md
+├── docker-compose.yaml       # local Postgres service
 ├── .gitignore
 │
 ├── docs/
-│   ├── architecture/
-│   ├── diagrams/
-│   ├── research/
-│   └── api/
+│   ├── api.md
+│   ├── frontend/
+│   └── research/
 │
 ├── frontend/
-│   ├── src/
-│   ├── components/
-│   ├── pages/
-│   ├── services/
-│   └── assets/
+│   └── src/
+│       ├── components/       # dashboard panels, topology, charts, chat UI
+│       ├── context/          # SimulationContext (WS state, adapters)
+│       ├── services/         # REST/WebSocket clients + adapters
+│       ├── hooks/
+│       ├── types/
+│       └── utils/
 │
 ├── backend/
-│   ├── api/
-│   ├── models/
-│   ├── services/
-│   ├── database/
-│   └── main.py
+│   └── app/
+│       ├── api/               # routers: network, devices, topology, telemetry,
+│       │                      #   alerts, predictions, simulation, scenario, chat, ws
+│       ├── models/            # SQLAlchemy models
+│       ├── schemas/           # Pydantic request/response schemas
+│       ├── crud/
+│       ├── services/          # snapshot processing, scenario engine, autonomous executor
+│       ├── simulator/         # live_simulator background task
+│       ├── websocket/         # connection manager
+│       ├── database/
+│       └── main.py
 │
 ├── ai_engine/
-│   ├── intent/
-│   ├── prediction/
-│   ├── decision/
-│   ├── optimizer/
-│   └── explainability/
+│   ├── prediction/            # congestion/failure model training & inference
+│   ├── models/                # trained .pkl model artifacts
+│   ├── decision/              # strategy planner, planning rules, strategy library
+│   └── optimizer/             # multi-objective scoring, ranking, constraints
+│
+├── pipeline/                  # orchestrates prediction -> planning -> optimization -> execution
 │
 ├── simulator/
-│   ├── digital_twin/
-│   ├── topology/
-│   ├── routing/
-│   ├── scenarios/
-│   └── network_state/
+│   └── digital_twin/          # state transitions, forecasting, scenario runner, metrics
 │
 ├── datasets/
-│   ├── raw/
+│   ├── NEXUS_Synthetic_Datasets.xlsx
 │   ├── processed/
 │   └── synthetic/
 │
-├── infrastructure/
-│   ├── configs/
-│   ├── deployment/
-│   └── monitoring/
-│
-└── .github/
-    ├── workflows/
-    ├── prompts/
-    └── instructions/
+├── tests/
+└── reports/
 ```
 
 ---
@@ -209,10 +213,19 @@ cd HELIOS
 ```bash
 cd backend
 
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
 pip install -r requirements.txt
 
-uvicorn main:app --reload
+cp .env.example .env      # then set your PostgreSQL connection string
+
+alembic upgrade head
+
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+See `backend/README.md` for Docker instructions.
 
 ## Frontend
 
@@ -257,11 +270,12 @@ Responsible for:
 
 Responsible for:
 
-- REST APIs
+- REST APIs + WebSocket streaming
+- Chat/intent endpoint (currently rule-based, not an LLM)
 - Authentication (future)
-- Database
-- Business logic
-- Integration
+- Database (models, CRUD, Alembic migrations)
+- Explainability service
+- Business logic and integration with `ai_engine/`, `simulator/`, and `pipeline/`
 
 ---
 
@@ -269,12 +283,18 @@ Responsible for:
 
 Responsible for:
 
-- Intent understanding
 - Congestion prediction
 - Failure prediction
-- Decision making
-- Explainable AI
-- Strategy optimization
+- Strategy planning and decision rules
+- Multi-objective strategy optimization (scoring, ranking, constraints)
+
+---
+
+## pipeline/
+
+Responsible for:
+
+- Orchestrating the end-to-end loop: prediction → strategy planning → digital-twin simulation → optimization → autonomous execution
 
 ---
 
@@ -282,12 +302,9 @@ Responsible for:
 
 Responsible for:
 
-- Digital Twin
-- Network topology
-- Routing
-- Traffic simulation
-- Failure simulation
-- Scenario execution
+- Digital Twin state transitions
+- Forecasting
+- Scenario injection and execution (traffic surge, tower/fiber/power failures, DDoS, weather events, etc.)
 
 ---
 
@@ -295,11 +312,8 @@ Responsible for:
 
 Contains
 
-- Synthetic telecom traffic
-- Tower information
-- User mobility
-- Edge server data
-- Historical traffic
+- Synthetic telecom traffic (NEXUS synthetic dataset)
+- Processed and synthetic data splits used by the prediction models
 
 ---
 
@@ -307,83 +321,87 @@ Contains
 
 Contains
 
-- Research
-- Architecture
-- API documentation
-- Diagrams
-- Technical reports
+- API reference (`api.md`)
+- Frontend documentation
+- Research notes
 
 ---
 
 # API Overview
 
-## Intent API
+None of the routes below are namespaced under `/api` — they're mounted directly on the app root (e.g. `http://localhost:8000/towers`, not `/api/towers`).
+
+## Network State
 
 ```http
-POST /intent
-```
-
-Converts natural language into structured network objectives.
-
-Example:
-
-```json
-{
-  "intent": "Optimize the network for a stadium event."
-}
+GET /towers
+GET /towers/{id}
+GET /towers/{id}/utilization
+GET /towers/{id}/traffic
+GET /towers/{id}/failures
+GET /towers/{id}/slices
+GET /edges
+GET /edges/{id}/telemetry
+GET /network-health
+GET /latest              # most recent snapshot (telemetry, prediction, strategies, execution)
+GET /history
 ```
 
 ---
 
-## Prediction API
+## AI Loop History
 
 ```http
-POST /predict
+GET /executions/latest
+GET /executions/history
+GET /explain/latest      # explainability rationale for the most recent decision
 ```
-
-Predicts:
-
-- Congestion
-- Tower overload
-- Link failures
-- Demand spikes
 
 ---
 
-## Decision API
+## Scenario Injection
 
 ```http
-POST /decision
+GET  /scenarios                # list available scenario names
+POST /scenarios/inject
+POST /scenarios/schedule
+POST /scenarios/random/start
+POST /scenarios/random/stop
+GET  /scenarios/history
 ```
-
-Returns the autonomous optimization strategy.
 
 ---
 
-## Simulation API
+## Devices
 
 ```http
-POST /simulate
+GET    /devices
+POST   /devices
+GET    /devices/{id}
+PUT    /devices/{id}
+DELETE /devices/{id}
 ```
-
-Runs the Digital Twin and evaluates multiple strategies.
 
 ---
 
-## Dashboard API
+## Chat
 
 ```http
-GET /network/status
+POST /chat/intent
+POST /chat/analyze
 ```
 
-Returns:
+Currently rule-based keyword matching against a fixed set of scenarios — not a live LLM call.
 
-- Network Health Score
-- Active users
-- Latency
-- Bandwidth
-- Active slices
-- AI reasoning
+---
+
+## Real-time Stream
+
+```http
+WS /ws/network
+```
+
+Broadcasts a full snapshot (telemetry, prediction, strategy, execution, explainability, active scenario) roughly once per second to every connected client.
 
 ---
 
@@ -425,13 +443,12 @@ Backend
 
 Database
 
-- SQLite (Prototype)
+- PostgreSQL (Neon)
 
 Future production deployment:
 
-- Docker
+- Docker (a `docker-compose.yaml` for local Postgres already exists at the repo root)
 - Kubernetes
-- PostgreSQL
 - Redis
 - Prometheus
 - Grafana
@@ -441,9 +458,9 @@ Future production deployment:
 # Known Limitations
 
 - Uses synthetic telecom datasets
-- Prototype-scale network simulation
+- Prototype-scale network simulation, scoped to a single simulated tower
 - No integration with real telecom hardware
-- LLM performs intent parsing only
+- Chat/intent understanding is rule-based keyword matching, not a live LLM
 - Simplified routing and orchestration logic
 - Single-node deployment
 
@@ -452,11 +469,12 @@ Future production deployment:
 # Future Scope
 
 - Real-time telecom telemetry integration
+- Live LLM-backed intent understanding for the chat interface
 - Reinforcement Learning for autonomous optimization
 - Multi-agent AI orchestration
 - Open RAN integration
 - SDN controller support
-- Network slicing orchestration
+- Network-wide (multi-tower) slice orchestration — slicing today is scoped to a single simulated tower
 - Kubernetes-based deployment
 - Federated learning across edge nodes
 - Real-time anomaly detection
@@ -474,4 +492,4 @@ HELIOS is developed as a research-oriented hackathon project exploring the futur
 
 ## License
 
-This project is released under the MIT License.
+Intended to be released under the MIT License — no `LICENSE` file has been added to the repository yet.
